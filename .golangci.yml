@@ -17,7 +17,7 @@ linters:
     - decorder
     - dogsled
     - errcheck
-    - exportloopref
+    - copyloopvar
     - forcetypeassert
     - funlen
     - godot
@@ -35,5 +35,5 @@ linters:
     - unconvert
     - unparam
     - unused
-    - vet
+    - govet
 
