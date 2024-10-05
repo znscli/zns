@@ -49,7 +49,7 @@ func NewQuerier(server string, logger hclog.Logger) Querier {
 
 // QueryTypes performs DNS queries for multiple types concurrently
 func (q *Query) QueryTypes(domain string, qtypes []uint16) ([]*dns.Msg, error) {
-	var errors error
+	var errors *multierror.Error
 	var wg sync.WaitGroup
 	messages := make([]*dns.Msg, len(qtypes))
 
@@ -65,7 +65,7 @@ func (q *Query) QueryTypes(domain string, qtypes []uint16) ([]*dns.Msg, error) {
 
 	wg.Wait()
 
-	return messages, errors
+	return messages, errors.ErrorOrNil()
 }
 
 // Query performs the DNS query and returns the response and any error encountered
