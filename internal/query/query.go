@@ -21,10 +21,10 @@ type Query struct {
 func NewQuerier(server string, logger hclog.Logger) Querier {
 	if logger == nil {
 		logger = hclog.New(&hclog.LoggerOptions{
-			Name:  "zns",
-			Level: hclog.LevelFromString(os.Getenv("ZNS_LOG_LEVEL")),
-			Color: hclog.AutoColor,
-            DisableTime: true,
+			Name:        "zns",
+			Level:       hclog.LevelFromString(os.Getenv("ZNS_LOG_LEVEL")),
+			Color:       hclog.AutoColor,
+			DisableTime: true,
 		})
 		logger.Warn("no logger provided, using default 'zns' logger")
 	}
