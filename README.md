@@ -9,7 +9,7 @@ brew install znscli/tap/zns
 ## Usage
 
 ```sh
- $ zns google.com
+$ zns google.com
 A       google.com.    04m05s       142.251.39.110
 AAAA    google.com.    04m07s       2a00:1450:400e:802::200e
 MX      google.com.    03m32s       10  smtp.google.com.
