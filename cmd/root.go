@@ -39,15 +39,13 @@ var (
 					for _, e := range merr.Errors {
 						fmt.Println(e)
 					}
-				} else { // This should never happen since all errors in zns are multierrors, but we handle it anyway.
+				} else {
 					fmt.Println(err)
 				}
 				os.Exit(1)
 			}
 
-			for _, msg := range messages {
-				fmt.Println(msg)
-			}
+			displayRecords(args[0], messages)
 		},
 	}
 )

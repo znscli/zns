@@ -43,7 +43,6 @@ func NewQuerier(server string, logger hclog.Logger) Querier {
 			Color:       hclog.AutoColor,
 			DisableTime: true,
 		})
-		logger.Warn("no logger provided, using default 'zns' logger")
 	}
 	return &Query{Server: server, Logger: logger}
 }
