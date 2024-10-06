@@ -45,7 +45,7 @@ var (
 				os.Exit(1)
 			}
 
-			displayRecords(args[0], messages)
+			printRecords(args[0], messages)
 		},
 	}
 )

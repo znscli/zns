@@ -12,8 +12,8 @@ import (
     "github.com/juju/ansiterm"
 )
 
-// displayRecords prints the DNS records to the terminal.
-func displayRecords(domainName string, messages []*dns.Msg) {
+// printRecords prints the DNS records to the terminal.
+func printRecords(domainName string, messages []*dns.Msg) {
     w := ansiterm.NewTabWriter(os.Stdout, 8, 8, 4, ' ', 0)
     w.SetColorCapable(true)
 
