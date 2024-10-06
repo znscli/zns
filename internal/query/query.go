@@ -4,7 +4,6 @@ import (
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
-	"os"
 	"sync"
 )
 
@@ -36,14 +35,6 @@ type Query struct {
 
 // NewQuerier creates a new Querier with the specified server.
 func NewQuerier(server string, logger hclog.Logger) Querier {
-	if logger == nil {
-		logger = hclog.New(&hclog.LoggerOptions{
-			Name:        "zns",
-			Level:       hclog.LevelFromString(os.Getenv("ZNS_LOG_LEVEL")),
-			Color:       hclog.AutoColor,
-			DisableTime: true,
-		})
-	}
 	return &Query{Server: server, Logger: logger}
 }
 
@@ -73,11 +64,16 @@ func (q *Query) Query(domain string, qtype uint16) (*dns.Msg, error) {
 	msg := new(dns.Msg)
 	msg.SetQuestion(dns.Fqdn(domain), qtype)
 
+	q.Logger.Debug("Querying DNS server", "server", q.Server, "domain", domain, "qtype", dns.TypeToString[qtype])
+
 	client := new(dns.Client)
-	resp, _, err := client.Exchange(msg, q.Server)
+	resp, rtt, err := client.Exchange(msg, q.Server)
 	if err != nil {
 		return nil, err
 	}
+
+	q.Logger.Debug("Received DNS response", "server", q.Server, "domain", domain, "qtype", dns.TypeToString[qtype], "rcode", dns.RcodeToString[resp.Rcode])
+	q.Logger.Debug("Round trip time", "rtt", rtt)
 
 	return resp, nil
 }
