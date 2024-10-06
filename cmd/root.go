@@ -25,7 +25,6 @@ var (
 				os.Exit(1)
 			}
 
-			// Initialize a new querier with the specified DNS server
 			querier := query.NewQuerier("1.1.1.1:53", nil)
 
 			qtypes := make([]uint16, 0, len(query.QueryTypes))
