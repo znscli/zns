@@ -30,3 +30,4 @@ Have a look through existing [Issues](https://github.com/znscli/zns/issues) and 
 ## License
 
 This project is licensed under the MIT License. You are free to use, modify, and distribute the software, provided that you include the original license in any copies of the software. See the [LICENSE](LICENSE) file for more details.
+
