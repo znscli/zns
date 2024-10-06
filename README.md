@@ -1,5 +1,7 @@
 # zns
 
+zns is a command-line utility for querying DNS records, displaying them in a human-readable, colored format that includes type, name, TTL, and value.
+
 ## Installing
 
 ```sh
