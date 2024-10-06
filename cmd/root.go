@@ -33,7 +33,7 @@ var (
 				qtypes = append(qtypes, qtype)
 			}
 
-			messages, err := querier.QueryTypes(args[0], qtypes)
+			messages, err := querier.MultiQuery(args[0], qtypes)
 			if err != nil {
 				if merr, ok := err.(*multierror.Error); ok {
 					for _, e := range merr.Errors {
