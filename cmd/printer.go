@@ -13,45 +13,43 @@ import (
 )
 
 // printRecords prints the DNS records to the terminal.
-func printRecords(domainName string, messages []*dns.Msg) {
+func printRecords(domainName string, answers []dns.RR) {
 	w := ansiterm.NewTabWriter(os.Stdout, 8, 8, 4, ' ', 0)
 	w.SetColorCapable(true)
 
 	domainColored := color.HiBlueString(domainName)
 
-	for _, msg := range messages {
-		for _, answer := range msg.Answer {
-			queryType := dns.TypeToString[answer.Header().Rrtype]
-			formattedTTL := color.HiMagentaString(formatTTL(answer.Header().Ttl))
+	for _, answer := range answers {
+		queryType := dns.TypeToString[answer.Header().Rrtype]
+		formattedTTL := color.HiMagentaString(formatTTL(answer.Header().Ttl))
 
-			switch rec := answer.(type) {
-			case *dns.A:
-				printARecord(w, queryType, domainColored, formattedTTL, rec)
+		switch rec := answer.(type) {
+		case *dns.A:
+			printARecord(w, queryType, domainColored, formattedTTL, rec)
 
-			case *dns.AAAA:
-				printAAAARecord(w, queryType, domainColored, formattedTTL, rec)
+		case *dns.AAAA:
+			printAAAARecord(w, queryType, domainColored, formattedTTL, rec)
 
-			case *dns.CNAME:
-				printCNAMERecord(w, queryType, domainColored, formattedTTL, rec)
+		case *dns.CNAME:
+			printCNAMERecord(w, queryType, domainColored, formattedTTL, rec)
 
-			case *dns.MX:
-				printMXRecord(w, queryType, domainColored, formattedTTL, rec)
+		case *dns.MX:
+			printMXRecord(w, queryType, domainColored, formattedTTL, rec)
 
-			case *dns.TXT:
-				printTXTRecord(w, queryType, domainColored, formattedTTL, rec)
+		case *dns.TXT:
+			printTXTRecord(w, queryType, domainColored, formattedTTL, rec)
 
-			case *dns.NS:
-				printNSRecord(w, queryType, domainColored, formattedTTL, rec)
+		case *dns.NS:
+			printNSRecord(w, queryType, domainColored, formattedTTL, rec)
 
-			case *dns.SOA:
-				printSOARecord(w, queryType, domainColored, formattedTTL, rec)
+		case *dns.SOA:
+			printSOARecord(w, queryType, domainColored, formattedTTL, rec)
 
-			case *dns.PTR:
-				printPTRRecord(w, queryType, domainColored, formattedTTL, rec)
+		case *dns.PTR:
+			printPTRRecord(w, queryType, domainColored, formattedTTL, rec)
 
-			default:
-				fmt.Fprintf(os.Stderr, "Unknown record type: %s\n", queryType)
-			}
+		default:
+			fmt.Fprintf(os.Stderr, "Unknown record type: %s\n", queryType)
 		}
 	}
 

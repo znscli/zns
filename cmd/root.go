@@ -8,6 +8,7 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-multierror"
+	"github.com/miekg/dns"
 	"github.com/spf13/cobra"
 	"github.com/znscli/zns/internal/query"
 )
@@ -86,19 +87,19 @@ var (
 				os.Exit(1)
 			}
 
+			// Aggregate the answers
+			var answers []dns.RR
+			for _, message := range messages {
+				answers = append(answers, message.Answer...)
+			}
+
 			// Sort the messages by resource record type
-			sort.SliceStable(messages, func(i, j int) bool {
-				if len(messages[i].Answer) == 0 {
-					return false
-				}
-				if len(messages[j].Answer) == 0 {
-					return true
-				}
-				return messages[i].Answer[0].Header().Rrtype < messages[j].Answer[0].Header().Rrtype
+			sort.SliceStable(answers, func(i, j int) bool {
+				return answers[i].Header().Rrtype > answers[j].Header().Rrtype
 			})
 
 			// Print the records
-			printRecords(args[0], messages)
+			printRecords(args[0], answers)
 		},
 	}
 )
