@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/hashicorp/go-hclog"
@@ -72,7 +73,7 @@ var (
 				qtypes = []uint16{qtypeInt}
 			}
 
-			// Execute the query
+			// Execute the queries
 			messages, err := querier.MultiQuery(args[0], qtypes)
 			if err != nil {
 				if merr, ok := err.(*multierror.Error); ok {
@@ -84,6 +85,17 @@ var (
 				}
 				os.Exit(1)
 			}
+
+			// Sort the messages by resource record type
+			sort.SliceStable(messages, func(i, j int) bool {
+				if len(messages[i].Answer) == 0 {
+					return false
+				}
+				if len(messages[j].Answer) == 0 {
+					return true
+				}
+				return messages[i].Answer[0].Header().Rrtype < messages[j].Answer[0].Header().Rrtype
+			})
 
 			// Print the records
 			printRecords(args[0], messages)
