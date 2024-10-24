@@ -42,6 +42,8 @@ func NewQuerier(server string, logger hclog.Logger) Querier {
 func (q *Query) MultiQuery(domain string, qtypes []uint16) ([]*dns.Msg, error) {
 	var errors *multierror.Error
 	var wg sync.WaitGroup
+	var mu sync.Mutex
+
 	messages := make([]*dns.Msg, len(qtypes))
 
 	for i, qtype := range qtypes {
@@ -49,8 +51,10 @@ func (q *Query) MultiQuery(domain string, qtypes []uint16) ([]*dns.Msg, error) {
 		go func(i int, qtype uint16) {
 			defer wg.Done()
 			msg, err := q.Query(domain, qtype)
+			mu.Lock()
 			messages[i] = msg
 			errors = multierror.Append(errors, err)
+			mu.Unlock()
 		}(i, qtype)
 	}
 
