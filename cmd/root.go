@@ -86,19 +86,15 @@ var (
 				os.Exit(1)
 			}
 
-			// Sort the messages by resource record type
 			sort.SliceStable(messages, func(i, j int) bool {
-				if len(messages[i].Answer) == 0 {
-					return false
-				}
-				if len(messages[j].Answer) == 0 {
-					return true
-				}
-				return messages[i].Answer[0].Header().Rrtype < messages[j].Answer[0].Header().Rrtype
+				return messages[i].Question[0].Qtype < messages[j].Question[0].Qtype
 			})
 
-			// Print the records
-			printRecords(args[0], messages)
+			for _, m := range messages {
+				for _, record := range m.Answer {
+					printRecord(args[0], record)
+				}
+			}
 		},
 	}
 )
