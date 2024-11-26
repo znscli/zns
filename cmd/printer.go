@@ -2,21 +2,16 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/juju/ansiterm"
 	"github.com/miekg/dns"
 )
 
-// printRecord prints the DNS records to the terminal.
-func printRecord(domainName string, answer dns.RR) {
-	w := ansiterm.NewTabWriter(os.Stdout, 8, 8, 4, ' ', 0)
-	w.SetColorCapable(true)
-
+// formatRecord generates a correctly tabbed string representing a DNS record.
+func formatRecord(domainName string, answer dns.RR) string {
 	domainColored := color.HiBlueString(domainName)
 
 	recordType := dns.TypeToString[answer.Header().Rrtype]
@@ -24,69 +19,67 @@ func printRecord(domainName string, answer dns.RR) {
 
 	switch rec := answer.(type) {
 	case *dns.A:
-		printARecord(w, recordType, domainColored, formattedTTL, rec)
+		return formatARecord(recordType, domainColored, formattedTTL, rec)
 
 	case *dns.AAAA:
-		printAAAARecord(w, recordType, domainColored, formattedTTL, rec)
+		return formatAAAARecord(recordType, domainColored, formattedTTL, rec)
 
 	case *dns.CNAME:
-		printCNAMERecord(w, recordType, domainColored, formattedTTL, rec)
+		return formatCNAMERecord(recordType, domainColored, formattedTTL, rec)
 
 	case *dns.MX:
-		printMXRecord(w, recordType, domainColored, formattedTTL, rec)
+		return formatMXRecord(recordType, domainColored, formattedTTL, rec)
 
 	case *dns.TXT:
-		printTXTRecord(w, recordType, domainColored, formattedTTL, rec)
+		return formatTXTRecord(recordType, domainColored, formattedTTL, rec)
 
 	case *dns.NS:
-		printNSRecord(w, recordType, domainColored, formattedTTL, rec)
+		return formatNSRecord(recordType, domainColored, formattedTTL, rec)
 
 	case *dns.SOA:
-		printSOARecord(w, recordType, domainColored, formattedTTL, rec)
+		return formatSOARecord(recordType, domainColored, formattedTTL, rec)
 
 	case *dns.PTR:
-		printPTRRecord(w, recordType, domainColored, formattedTTL, rec)
+		return formatPTRRecord(recordType, domainColored, formattedTTL, rec)
 
 	default:
-		fmt.Fprintf(os.Stderr, "Unknown record type: %s\n", recordType)
+		return fmt.Sprintf("Unknown record type: %s", recordType)
 	}
-
-	w.Flush()
 }
 
-func printARecord(w *ansiterm.TabWriter, queryType, domain, ttl string, rec *dns.A) {
-	fmt.Fprintf(w, "%s\t%s.\t%s\t%s\n", color.HiYellowString(queryType), domain, ttl, color.HiWhiteString(rec.A.String()))
+func formatARecord(queryType, domain, ttl string, rec *dns.A) string {
+	return fmt.Sprintf("%s\t%s.\t%s\t%s", color.HiYellowString(queryType), domain, ttl, color.HiWhiteString(rec.A.String()))
 }
 
-func printAAAARecord(w *ansiterm.TabWriter, queryType, domain, ttl string, rec *dns.AAAA) {
-	fmt.Fprintf(w, "%s\t%s.\t%s\t%s\n", color.HiYellowString(queryType), domain, ttl, color.HiWhiteString(rec.AAAA.String()))
+func formatAAAARecord(queryType, domain, ttl string, rec *dns.AAAA) string {
+	return fmt.Sprintf("%s\t%s.\t%s\t%s", color.HiYellowString(queryType), domain, ttl, color.HiWhiteString(rec.AAAA.String()))
 }
 
-func printCNAMERecord(w *ansiterm.TabWriter, queryType, domain, ttl string, rec *dns.CNAME) {
-	fmt.Fprintf(w, "%s\t%s.\t%s\t%s\n", color.HiYellowString(queryType), domain, ttl, color.HiWhiteString(rec.Target))
+func formatCNAMERecord(queryType, domain, ttl string, rec *dns.CNAME) string {
+	return fmt.Sprintf("%s\t%s.\t%s\t%s", color.HiYellowString(queryType), domain, ttl, color.HiWhiteString(rec.Target))
 }
 
-func printMXRecord(w *ansiterm.TabWriter, queryType, domain, ttl string, rec *dns.MX) {
+func formatMXRecord(queryType, domain, ttl string, rec *dns.MX) string {
 	preference := color.HiRedString(strconv.FormatUint(uint64(rec.Preference), 10))
-	fmt.Fprintf(w, "%s\t%s.\t%s\t%s %s\n", color.HiYellowString(queryType), domain, ttl, preference, color.HiWhiteString(rec.Mx))
+	return fmt.Sprintf("%s\t%s.\t%s\t%s %s", color.HiYellowString(queryType), domain, ttl, preference, color.HiWhiteString(rec.Mx))
 }
 
-func printTXTRecord(w *ansiterm.TabWriter, queryType, domain, ttl string, rec *dns.TXT) {
+func formatTXTRecord(queryType, domain, ttl string, rec *dns.TXT) string {
 	txtJoined := strings.Join(rec.Txt, " ")
-	fmt.Fprintf(w, "%s\t%s.\t%s\t%s\n", color.HiYellowString(queryType), domain, ttl, color.HiWhiteString(txtJoined))
+	return fmt.Sprintf("%s\t%s.\t%s\t%s", color.HiYellowString(queryType), domain, ttl, color.HiWhiteString(txtJoined))
 }
 
-func printNSRecord(w *ansiterm.TabWriter, queryType, domain, ttl string, rec *dns.NS) {
-	fmt.Fprintf(w, "%s\t%s.\t%s\t%s\n", color.HiYellowString(queryType), domain, ttl, color.HiWhiteString(rec.Ns))
+func formatNSRecord(queryType, domain, ttl string, rec *dns.NS) string {
+	return fmt.Sprintf("%s\t%s.\t%s\t%s", color.HiYellowString(queryType), domain, ttl, color.HiWhiteString(rec.Ns))
 }
 
-func printSOARecord(w *ansiterm.TabWriter, queryType, domain, ttl string, rec *dns.SOA) {
+func formatSOARecord(queryType, domain, ttl string, rec *dns.SOA) string {
 	primaryNameServer := color.HiRedString(rec.Ns)
-	fmt.Fprintf(w, "%s\t%s.\t%s\t%s %s\n", color.HiYellowString(queryType), domain, ttl, primaryNameServer, rec.Mbox)
+	return fmt.Sprintf("%s\t%s.\t%s\t%s %s", color.HiYellowString(queryType), domain, ttl, primaryNameServer, rec.Mbox)
 }
 
-func printPTRRecord(w *ansiterm.TabWriter, queryType, domain, ttl string, rec *dns.PTR) {
-	fmt.Fprintf(w, "%s\t%s.\t%s\t%s\n", color.HiYellowString(queryType), domain, ttl, color.HiWhiteString(rec.Ptr))
+func formatPTRRecord(queryType, domain, ttl string, rec *dns.PTR) string {
+	return fmt.Sprintf("%s\t%s.\t%s\t%s", color.HiYellowString(queryType), domain, ttl, color.HiWhiteString(rec.Ptr))
 }
 
 // formatTTL converts TTL to a more readable format (hours, minutes, seconds).

@@ -134,7 +134,8 @@ var (
 
 			for _, m := range messages {
 				for _, record := range m.Answer {
-					printRecord(args[0], record)
+					r := formatRecord(args[0], record)
+					v.Render(r)
 				}
 			}
 		},
