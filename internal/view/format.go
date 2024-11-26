@@ -85,7 +85,6 @@ func formatRecord(domainName string, answer dns.RR) string {
 	case *dns.PTR:
 		return fmt.Sprintf("%s\t%s.\t%s\t%s", recordType, color.HiBlueString(domainName), formattedTTL, color.HiWhiteString(rec.Ptr))
 	default:
-		// Return a multi-line string for unknown record types with a suggestion to raise an issue
 		return fmt.Sprintf(`
 Unknown record type: %s
 
