@@ -1,11 +1,13 @@
 package view
 
 import (
+	"github.com/miekg/dns"
 	"github.com/znscli/zns/internal/arguments"
 )
 
+// Renderer interface with a unified Render method
 type Renderer interface {
-	Render(message string, params ...any)
+	Render(domain string, record dns.RR)
 }
 
 func NewRenderer(vt arguments.ViewType, view *View) Renderer {
@@ -19,35 +21,51 @@ func NewRenderer(vt arguments.ViewType, view *View) Renderer {
 	}
 }
 
-// HumanRenderer is a view layer used to write human-readable output to a stream.
+// HumanRenderer for writing human-readable output
 type HumanRenderer struct {
 	view *View
 }
 
-// Validate that ZnsHuman implements the Zns interface.
+// Validate that HumanRenderer implements the Renderer interface.
 var _ Renderer = (*HumanRenderer)(nil)
 
-func (v *HumanRenderer) Render(message string, params ...any) {
-	// here we should receive a message looks like:
-	// A       google.com.    52s          172.217.168.238
-	// and we should write it to the view.Stream.Writer with a newline
-	v.view.Stream.Writer.Write([]byte(message + "\n"))
+// NewHumanRenderer creates a HumanRenderer with a "human" view bound to an output stream
+func NewHumanRenderer(view *View) *HumanRenderer {
+	return &HumanRenderer{
+		view: view,
+	}
 }
 
-// JSONRenderer is a view layer used to write JSON to a stream.
+// Render method for HumanRenderer
+func (v *HumanRenderer) Render(domain string, record dns.RR) {
+	humanReadable := formatRecord(domain, record)
+	v.view.Stream.Writer.Write([]byte(humanReadable + "\n"))
+}
+
+// JSONRenderer for rendering JSON output
 type JSONRenderer struct {
 	view *JSONView
 }
 
-// Validate that ZnsJSON implements the Zns interface.
+// Validate that JSONRenderer implements the Renderer interface.
 var _ Renderer = (*JSONRenderer)(nil)
 
+// NewJSONRenderer creates a JSONRenderer with a JSONView bound to an output stream
 func NewJSONRenderer(view *JSONView) *JSONRenderer {
 	return &JSONRenderer{
 		view: view,
 	}
 }
 
-func (v *JSONRenderer) Render(message string, params ...any) {
-	v.view.Output(message, params...)
+func (v *JSONRenderer) Render(domain string, record dns.RR) {
+	jsonMap := formatRecordAsJSON(domain, record)
+
+	var params []any
+	for key, value := range jsonMap {
+		// Append each key-value pair as separate parameters
+		params = append(params, key, value)
+	}
+
+	// Output all parameters
+	v.view.Output("Successful query", params...)
 }
