@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -9,13 +10,18 @@ import (
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-multierror"
 	"github.com/spf13/cobra"
+	"github.com/znscli/zns/internal/arguments"
 	"github.com/znscli/zns/internal/query"
+	"github.com/znscli/zns/internal/view"
 )
 
 var (
 	version string
 
-	debug  bool
+	debug   bool
+	json    bool
+	noColor bool
+
 	server string
 	qtype  string
 
@@ -30,19 +36,52 @@ var (
 				os.Exit(1)
 			}
 
-			// Determine log level based on environment variable and debug flag
+			var color hclog.ColorOption
+			if os.Getenv("NO_COLOR") != "" {
+				noColor = true
+				color = hclog.ColorOff
+			} else {
+				color = hclog.AutoColor
+			}
+
 			logLevel := os.Getenv("ZNS_LOG_LEVEL")
 			if debug {
-				logLevel = "DEBUG" // Override log level to DEBUG if the debug flag is set
+				logLevel = "DEBUG"
 			}
+
+			var vt arguments.ViewType
+			if json {
+				vt = arguments.ViewJSON
+			} else {
+				vt = arguments.ViewHuman
+			}
+
+			var w io.Writer = os.Stdout
+			logFile := os.Getenv("ZNS_LOG_FILE")
+			if logFile != "" {
+				f, err := os.Create(logFile)
+				if err != nil {
+					panic(fmt.Sprintf("Failed to create log file: %v", err))
+				}
+				defer f.Close()
+				w = f
+			}
+
+			v := view.NewRenderer(vt, &view.View{
+				Stream: &view.Stream{
+					Writer: w,
+				},
+			})
 
 			logger := hclog.New(&hclog.LoggerOptions{
 				Name:                 "zns",
+				Output:               w,
 				Level:                hclog.LevelFromString(logLevel),
-				Color:                hclog.AutoColor,
-				ColorHeaderAndFields: true,
-				DisableTime:          true,
-			})
+				Color:                color,
+				ColorHeaderAndFields: !noColor,
+				DisableTime:          false,
+				JSONFormat:           json,
+			}).With("@domain", args[0])
 
 			// Log the debug state and current log level
 			logger.Debug("Debug logging enabled", "debug", debug)
@@ -92,7 +131,7 @@ var (
 
 			for _, m := range messages {
 				for _, record := range m.Answer {
-					printRecord(args[0], record)
+					v.Render(args[0], record)
 				}
 			}
 		},
@@ -103,7 +142,8 @@ func init() {
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
 	rootCmd.Flags().StringVarP(&server, "server", "s", "1.1.1.1", "DNS server to query")
 	rootCmd.Flags().StringVarP(&qtype, "query-type", "q", "", "DNS query type")
-	rootCmd.Flags().BoolVar(&debug, "debug", false, "Enable debug logging")
+	rootCmd.Flags().BoolVar(&debug, "debug", false, "If set, debug output is printed")
+	rootCmd.Flags().BoolVar(&json, "json", false, "If set, output is printed in JSON format.")
 }
 
 func Execute() {

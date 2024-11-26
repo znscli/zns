@@ -1,10 +1,11 @@
 package query
 
 import (
+	"sync"
+
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
-	"sync"
 )
 
 var (
