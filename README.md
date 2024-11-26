@@ -28,7 +28,7 @@ NS      google.com.    93h48m24s    ns1.google.com.
 SOA     google.com.    55s          ns1.google.com. dns-admin.google.com.
 ```
 
-## JSON output
+### JSON output
 
 ```sh
 $ zns google.com --json | jq
@@ -55,7 +55,7 @@ $ zns google.com --json | jq
 ...
 ```
 
-## Writing to a file
+### Writing to a file
 
 ```sh
 export ZNS_LOG_FILE=/tmp/zns.log
