@@ -81,7 +81,7 @@ var (
 				ColorHeaderAndFields: !noColor,
 				DisableTime:          false,
 				JSONFormat:           json,
-			})
+			}).With("@domain", args[0])
 
 			// Log the debug state and current log level
 			logger.Debug("Debug logging enabled", "debug", debug)
