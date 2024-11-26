@@ -64,7 +64,7 @@ $ zns google.com --json | jq
   "@type": "A",
   "@version": "dev",
   "@view": "json"
-}
+},
 {
   "@domain": "google.com",
   "@level": "info",
