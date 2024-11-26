@@ -66,6 +66,5 @@ func (v *JSONRenderer) Render(domain string, record dns.RR) {
 		params = append(params, key, value)
 	}
 
-	// Output all parameters
 	v.view.Output("Successful query", params...)
 }
