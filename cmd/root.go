@@ -18,8 +18,10 @@ import (
 var (
 	version string
 
-	debug  bool
-	json   bool
+	debug   bool
+	json    bool
+	noColor bool
+
 	server string
 	qtype  string
 
@@ -32,6 +34,14 @@ var (
 				fmt.Println("error: provide a domain name")
 				fmt.Println("See 'zns -h' for help and examples")
 				os.Exit(1)
+			}
+
+			var color hclog.ColorOption
+			if os.Getenv("NO_COLOR") != "" {
+				noColor = true
+				color = hclog.ColorOff
+			} else {
+				color = hclog.AutoColor
 			}
 
 			logLevel := os.Getenv("ZNS_LOG_LEVEL")
@@ -70,8 +80,8 @@ var (
 				Name:                 "zns",
 				Output:               w,
 				Level:                hclog.LevelFromString(logLevel),
-				Color:                hclog.AutoColor,
-				ColorHeaderAndFields: true,
+				Color:                color,
+				ColorHeaderAndFields: !noColor,
 				DisableTime:          false,
 				JSONFormat:           json,
 			})
