@@ -2,6 +2,7 @@ package view
 
 import (
 	"github.com/hashicorp/go-hclog"
+	znsversion "github.com/znscli/zns/version"
 )
 
 type JSONView struct {
@@ -18,11 +19,10 @@ func NewJSONView(view *View) *JSONView {
 			DisableTime:          false,
 			Color:                hclog.ColorOff,
 			ColorHeaderAndFields: false,
-		}),
+		}).With("@view", "json", "@version", znsversion.Version),
 	}
 }
 
 func (v *JSONView) Output(message string, params ...any) {
-	params = append(params, "@view", "json")
 	v.log.Info(message, params...)
 }
