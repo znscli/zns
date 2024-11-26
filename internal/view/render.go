@@ -66,5 +66,7 @@ func (v *JSONRenderer) Render(message string, params ...any) {
 	if err != nil {
 		panic(fmt.Sprintf("failed to marshal JSON data: %v", err))
 	}
-	v.view.Output(string(output), params...)
+
+	output = append(output, '\n')
+	v.view.Stream.Writer.Write(output)
 }

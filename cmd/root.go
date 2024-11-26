@@ -34,10 +34,9 @@ var (
 				os.Exit(1)
 			}
 
-			// Determine log level based on environment variable and debug flag
 			logLevel := os.Getenv("ZNS_LOG_LEVEL")
 			if debug {
-				logLevel = "DEBUG" // Override log level to DEBUG if the debug flag is set
+				logLevel = "DEBUG"
 			}
 
 			var vt arguments.ViewType
@@ -47,11 +46,15 @@ var (
 				vt = arguments.ViewHuman
 			}
 
-			// check if we're writing to a file
 			var w io.Writer = os.Stdout
-			fileEnv := os.Getenv("ZNS_LOG_FILE")
-			if fileEnv != "" {
-				w = os.NewFile(3, fileEnv)
+			logFile := os.Getenv("ZNS_LOG_FILE")
+			if logFile != "" {
+				f, err := os.Create(logFile)
+				if err != nil {
+					panic(fmt.Sprintf("Failed to create log file: %v", err))
+				}
+				defer f.Close()
+				w = f
 			}
 
 			v := view.NewRenderer(vt, &view.View{
@@ -61,14 +64,16 @@ var (
 				Domain: args[0],
 			})
 
-			v.Log("Starting zns")
+			v.Render("Test", "foo", "bar")
 
 			logger := hclog.New(&hclog.LoggerOptions{
 				Name:                 "zns",
+				Output:               w,
 				Level:                hclog.LevelFromString(logLevel),
 				Color:                hclog.AutoColor,
 				ColorHeaderAndFields: true,
-				DisableTime:          true,
+				DisableTime:          false,
+				JSONFormat:           json,
 			})
 
 			// Log the debug state and current log level
