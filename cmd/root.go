@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -9,13 +10,16 @@ import (
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-multierror"
 	"github.com/spf13/cobra"
+	"github.com/znscli/zns/internal/arguments"
 	"github.com/znscli/zns/internal/query"
+	"github.com/znscli/zns/internal/view"
 )
 
 var (
 	version string
 
 	debug  bool
+	json   bool
 	server string
 	qtype  string
 
@@ -35,6 +39,29 @@ var (
 			if debug {
 				logLevel = "DEBUG" // Override log level to DEBUG if the debug flag is set
 			}
+
+			var vt arguments.ViewType
+			if json {
+				vt = arguments.ViewJSON
+			} else {
+				vt = arguments.ViewHuman
+			}
+
+			// check if we're writing to a file
+			var w io.Writer = os.Stdout
+			fileEnv := os.Getenv("ZNS_LOG_FILE")
+			if fileEnv != "" {
+				w = os.NewFile(3, fileEnv)
+			}
+
+			v := view.NewRenderer(vt, &view.View{
+				Stream: &view.Stream{
+					Writer: w,
+				},
+				Domain: args[0],
+			})
+
+			v.Log("Starting zns")
 
 			logger := hclog.New(&hclog.LoggerOptions{
 				Name:                 "zns",
@@ -103,7 +130,8 @@ func init() {
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
 	rootCmd.Flags().StringVarP(&server, "server", "s", "1.1.1.1", "DNS server to query")
 	rootCmd.Flags().StringVarP(&qtype, "query-type", "q", "", "DNS query type")
-	rootCmd.Flags().BoolVar(&debug, "debug", false, "Enable debug logging")
+	rootCmd.Flags().BoolVar(&debug, "debug", false, "If set, debug output is printed")
+	rootCmd.Flags().BoolVar(&json, "json", false, "If set, output is printed in JSON format.")
 }
 
 func Execute() {
