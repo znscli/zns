@@ -71,10 +71,7 @@ var (
 				Stream: &view.Stream{
 					Writer: w,
 				},
-				Domain: args[0],
 			})
-
-			v.Render("Test", "foo", "bar")
 
 			logger := hclog.New(&hclog.LoggerOptions{
 				Name:                 "zns",
@@ -134,8 +131,7 @@ var (
 
 			for _, m := range messages {
 				for _, record := range m.Answer {
-					r := formatRecord(args[0], record)
-					v.Render(r)
+					v.Render(args[0], record)
 				}
 			}
 		},
