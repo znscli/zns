@@ -1,10 +1,6 @@
 package view
 
 import (
-	"encoding/json"
-	"fmt"
-	"time"
-
 	"github.com/znscli/zns/internal/arguments"
 )
 
@@ -35,6 +31,7 @@ func (v *HumanRenderer) Render(message string, params ...any) {
 	// here we should receive a message looks like:
 	// A       google.com.    52s          172.217.168.238
 	// and we should write it to the view.Stream.Writer with a newline
+	v.view.Stream.Writer.Write([]byte(message + "\n"))
 }
 
 // JSONRenderer is a view layer used to write JSON to a stream.
@@ -52,21 +49,5 @@ func NewJSONRenderer(view *JSONView) *JSONRenderer {
 }
 
 func (v *JSONRenderer) Render(message string, params ...any) {
-	currentTimestamp := time.Now().UTC().Format(time.RFC3339)
-
-	jsonData := map[string]string{
-		"@level":     "info",
-		"@message":   message,
-		"@domain":    v.view.Domain,
-		"@timestamp": currentTimestamp,
-		"view":       "json",
-	}
-
-	output, err := json.Marshal(jsonData)
-	if err != nil {
-		panic(fmt.Sprintf("failed to marshal JSON data: %v", err))
-	}
-
-	output = append(output, '\n')
-	v.view.Stream.Writer.Write(output)
+	v.view.Output(message, params...)
 }
