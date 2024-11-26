@@ -28,6 +28,26 @@ NS      google.com.    93h48m24s    ns1.google.com.
 SOA     google.com.    55s          ns1.google.com. dns-admin.google.com.
 ```
 
+### Query a specific record type
+
+```sh
+$ zns google.com -q NS
+NS      google.com.    93h48m24s    ns2.google.com.
+NS      google.com.    93h48m24s    ns3.google.com.
+NS      google.com.    93h48m24s    ns4.google.com.
+NS      google.com.    93h48m24s    ns1.google.com.
+```
+
+### Use a specific DNS server
+
+```sh
+$ zns google.com -q NS --server 1.1.1.1
+NS      google.com.    93h48m24s    ns2.google.com.
+NS      google.com.    93h48m24s    ns3.google.com.
+NS      google.com.    93h48m24s    ns4.google.com.
+NS      google.com.    93h48m24s    ns1.google.com.
+```
+
 ### JSON output
 
 ```sh
