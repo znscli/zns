@@ -26,8 +26,26 @@ var (
 	qtype  string
 
 	rootCmd = &cobra.Command{
-		Use:     "zns",
-		Short:   "zns - foobar",
+		Use:   "zns",
+		Short: "zns is a command-line utility for querying DNS records and displaying them in human- or machine-readable formats.",
+		Long:  "zns is a command-line utility for querying DNS records, displaying them in a human-readable, colored format that includes type, name, TTL, and value. It supports various DNS record types, concurrent queries for improved performance, JSON output format for machine-readable results, and options to write output to a file or query a specific DNS server.",
+		Example: `
+  # Query DNS records for example.com
+  zns example.com
+
+  # Query a specific record type
+  zns example.com -q NS
+
+  # Use a specific DNS server
+  zns example.com -q NS --server 1.1.1.1
+
+  # JSON output
+  zns example.com --json | jq
+
+  # Writing to a file
+  export ZNS_LOG_FILE=/tmp/zns.log
+  zns example.com
+`,
 		Version: version,
 		Run: func(cmd *cobra.Command, args []string) {
 			if len(args) != 1 {
