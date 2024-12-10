@@ -149,9 +149,10 @@ var (
 
 			for _, m := range messages {
 				for _, record := range m.Answer {
-					v.Render(args[0], record)
+					v.AddRecord(args[0], record)
 				}
 			}
+			v.Render()
 		},
 	}
 )
