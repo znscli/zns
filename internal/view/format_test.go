@@ -182,7 +182,7 @@ func TestFormatRecord(t *testing.T) {
 		os.Setenv("NO_COLOR", "true") // Disable colors for easier testing
 
 		r := formatRecord(domain, record)
-		assert.Equal(t, "A\texample.com.\t03m42s\t127.0.0.1", r)
+		assert.Equal(t, []interface{}{"A", "example.com", "03m42s", "127.0.0.1"}, r)
 	})
 
 	t.Run("CNAME record", func(t *testing.T) {
@@ -198,7 +198,7 @@ func TestFormatRecord(t *testing.T) {
 		}
 
 		r := formatRecord(domain, record)
-		assert.Equal(t, "CNAME\texample.com.\t08m20s\texample.com.", r)
+		assert.Equal(t, []interface{}{"CNAME", "example.com", "08m20s", "example.com."}, r)
 	})
 
 	t.Run("MX record", func(t *testing.T) {
@@ -215,7 +215,7 @@ func TestFormatRecord(t *testing.T) {
 		}
 
 		r := formatRecord(domain, record)
-		assert.Equal(t, "MX\texample.com.\t08m20s\t10 example.com.", r)
+		assert.Equal(t, []interface{}{"MX", "example.com", "08m20s", "10", "example.com."}, r)
 	})
 
 	t.Run("SOA record", func(t *testing.T) {
@@ -232,7 +232,7 @@ func TestFormatRecord(t *testing.T) {
 		}
 
 		r := formatRecord(domain, record)
-		assert.Equal(t, "SOA\texample.com.\t08m20s\texample.com. hostmaster.example.com.", r)
+		assert.Equal(t, []interface{}{"SOA", "example.com", "08m20s", "example.com.", "hostmaster.example.com."}, r)
 	})
 
 	t.Run("Unknown record type", func(t *testing.T) {
@@ -248,6 +248,6 @@ func TestFormatRecord(t *testing.T) {
 		}
 
 		r := formatRecord(domain, record)
-		assert.Contains(t, r, "Unknown record type")
+		assert.Contains(t, r[0].(string), "Unknown record type")
 	})
 }

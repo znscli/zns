@@ -57,9 +57,10 @@ func TestNewHumanRenderer_Render(t *testing.T) {
 			A: net.IPv4(127, 0, 0, 1),
 		}
 
-		hr.Render(domain, record)
+		hr.AddRecord(domain, record)
+		hr.Render()
 
-		want := "A\texample.com.\t03m42s\t127.0.0.1\n"
+		want := " A  example.com  03m42s  127.0.0.1 \n"
 
 		assert.Equal(t, want, b.String())
 	})
@@ -94,11 +95,12 @@ func TestNewHumanRenderer_Render(t *testing.T) {
 		}
 
 		for _, record := range records {
-			hr.Render(domain, record)
+			hr.AddRecord(domain, record)
 		}
+		hr.Render()
 
-		want := "A\texample.com.\t03m42s\t127.0.0.1\n" +
-			"AAAA\texample.com.\t03m42s\t2001:db8::1\n"
+		want := " A     example.com  03m42s  127.0.0.1   \n" +
+			" AAAA  example.com  03m42s  2001:db8::1 \n"
 
 		assert.Equal(t, want, b.String())
 	})
@@ -150,7 +152,7 @@ func TestNewJSONRenderer_Render(t *testing.T) {
 			A: net.IPv4(127, 0, 0, 1),
 		}
 
-		jr.Render(domain, record)
+		jr.AddRecord(domain, record)
 
 		want := []map[string]interface{}{
 			{
@@ -197,7 +199,7 @@ func TestNewJSONRenderer_Render(t *testing.T) {
 		}
 
 		for _, record := range records {
-			jr.Render(domain, record)
+			jr.AddRecord(domain, record)
 		}
 
 		want := []map[string]interface{}{
