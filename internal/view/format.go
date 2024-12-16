@@ -2,13 +2,27 @@ package view
 
 import (
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"github.com/fatih/color"
 	"github.com/miekg/dns"
 )
+
+// NewTabWriter creates and initializes a tabwriter.Writer.
+func NewTabWriter(w io.Writer) *tabwriter.Writer {
+	return tabwriter.NewWriter(
+		w,
+		0,   // Minwidth
+		8,   // Tabwidth
+		3,   // Padding
+		' ', // Padchar
+		0,   // Flags
+	)
+}
 
 // formatTTL converts TTL to a more readable format (hours, minutes, seconds).
 func formatTTL(ttl uint32) string {
@@ -32,7 +46,6 @@ func formatRecordAsJSON(domain string, answer dns.RR) map[string]interface{} {
 	m["@type"] = dns.TypeToString[answer.Header().Rrtype]
 	m["@ttl"] = formatTTL(answer.Header().Ttl)
 
-	// Add specific fields depending on the record type
 	switch rec := answer.(type) {
 	case *dns.A:
 		m["@record"] = rec.A.String()
@@ -66,31 +79,31 @@ func formatRecord(domainName string, answer dns.RR) string {
 
 	switch rec := answer.(type) {
 	case *dns.A:
-		return fmt.Sprintf("%s\t%s.\t%s\t%s", recordType, color.HiBlueString(domainName), formattedTTL, color.HiWhiteString(rec.A.String()))
+		return fmt.Sprintf("%s\t%s.\t%s\t%s\n", recordType, color.HiBlueString(domainName), formattedTTL, color.HiWhiteString(rec.A.String()))
 	case *dns.AAAA:
-		return fmt.Sprintf("%s\t%s.\t%s\t%s", recordType, color.HiBlueString(domainName), formattedTTL, color.HiWhiteString(rec.AAAA.String()))
+		return fmt.Sprintf("%s\t%s.\t%s\t%s\n", recordType, color.HiBlueString(domainName), formattedTTL, color.HiWhiteString(rec.AAAA.String()))
 	case *dns.CNAME:
-		return fmt.Sprintf("%s\t%s.\t%s\t%s", recordType, color.HiBlueString(domainName), formattedTTL, color.HiWhiteString(rec.Target))
+		return fmt.Sprintf("%s\t%s.\t%s\t%s\n", recordType, color.HiBlueString(domainName), formattedTTL, color.HiWhiteString(rec.Target))
 	case *dns.MX:
 		preference := color.HiRedString(strconv.FormatUint(uint64(rec.Preference), 10))
-		return fmt.Sprintf("%s\t%s.\t%s\t%s %s", recordType, color.HiBlueString(domainName), formattedTTL, preference, color.HiWhiteString(rec.Mx))
+		return fmt.Sprintf("%s\t%s.\t%s\t%s %s\n", recordType, color.HiBlueString(domainName), formattedTTL, preference, color.HiWhiteString(rec.Mx))
 	case *dns.TXT:
 		txtJoined := strings.Join(rec.Txt, " ")
-		return fmt.Sprintf("%s\t%s.\t%s\t%s", recordType, color.HiBlueString(domainName), formattedTTL, color.HiWhiteString(txtJoined))
+		return fmt.Sprintf("%s\t%s.\t%s\t%s\n", recordType, color.HiBlueString(domainName), formattedTTL, color.HiWhiteString(txtJoined))
 	case *dns.NS:
-		return fmt.Sprintf("%s\t%s.\t%s\t%s", recordType, color.HiBlueString(domainName), formattedTTL, color.HiWhiteString(rec.Ns))
+		return fmt.Sprintf("%s\t%s.\t%s\t%s\n", recordType, color.HiBlueString(domainName), formattedTTL, color.HiWhiteString(rec.Ns))
 	case *dns.SOA:
 		primaryNameServer := color.HiRedString(rec.Ns)
-		return fmt.Sprintf("%s\t%s.\t%s\t%s %s", recordType, color.HiBlueString(domainName), formattedTTL, primaryNameServer, color.HiWhiteString(rec.Mbox))
+		return fmt.Sprintf("%s\t%s.\t%s\t%s %s\n", recordType, color.HiBlueString(domainName), formattedTTL, primaryNameServer, color.HiWhiteString(rec.Mbox))
 	case *dns.PTR:
-		return fmt.Sprintf("%s\t%s.\t%s\t%s", recordType, color.HiBlueString(domainName), formattedTTL, color.HiWhiteString(rec.Ptr))
+		return fmt.Sprintf("%s\t%s.\t%s\t%s\n", recordType, color.HiBlueString(domainName), formattedTTL, color.HiWhiteString(rec.Ptr))
 	default:
 		return fmt.Sprintf(`
 Unknown record type: %s
 
 We encountered an unsupported DNS record type: %s. 
-Please consider raising an issue on GitHub to add support for this record type.
 
+Please consider raising an issue on GitHub to add support for this record type.
 https://github.com/znscli/zns/issues/new
 
 Thank you for your contribution!
