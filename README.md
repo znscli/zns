@@ -1,7 +1,5 @@
 # zns
 
-![CI](https://github.com/znscli/zns/actions/workflows/ci.yaml/badge.svg?branch=main)
-
 zns is a command-line utility for querying DNS records, displaying them in a human-readable, colored format that includes type, name, TTL, and value.
 
 > [!WARNING] 
