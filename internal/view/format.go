@@ -52,6 +52,7 @@ func formatRecordAsJSON(domain string, answer dns.RR) map[string]interface{} {
 	m["@type"] = dns.TypeToString[answer.Header().Rrtype]
 	m["@ttl"] = formatTTL(answer.Header().Ttl)
 
+	// Add specific fields depending on the record type
 	switch rec := answer.(type) {
 	case *dns.A:
 		m["@record"] = rec.A.String()
