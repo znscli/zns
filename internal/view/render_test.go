@@ -3,7 +3,6 @@ package view
 import (
 	"bytes"
 	"net"
-	"os"
 	"testing"
 
 	"github.com/miekg/dns"
@@ -44,7 +43,7 @@ func TestNewHumanRenderer_Render(t *testing.T) {
 		v := NewView(&b)
 		hr := NewHumanRenderer(v)
 
-		os.Setenv("NO_COLOR", "1")
+		t.Setenv("NO_COLOR", "1")
 
 		domain := "example.com"
 		record := &dns.A{
@@ -69,7 +68,7 @@ func TestNewHumanRenderer_Render(t *testing.T) {
 		v := NewView(&b)
 		hr := NewHumanRenderer(v)
 
-		os.Setenv("NO_COLOR", "1")
+		t.Setenv("NO_COLOR", "1")
 
 		domain := "example.com"
 		records := []dns.RR{
