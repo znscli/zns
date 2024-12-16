@@ -56,7 +56,7 @@ func TestNewJSONView_params(t *testing.T) {
 // against a slice of structs representing the desired log messages. It
 // verifies that the output of JSONView is in JSON log format, one message per
 // line.
-func testJSONViewOutputEqualsFull(t *testing.T, output string, want []map[string]interface{}, options ...cmp.Option) {
+func testJSONViewOutputEqualsFull(t *testing.T, output string, want []map[string]interface{}) {
 	t.Helper()
 
 	// Remove final trailing newline
@@ -94,7 +94,7 @@ func testJSONViewOutputEqualsFull(t *testing.T, output string, want []map[string
 			}
 		}
 
-		if !cmp.Equal(wantStruct, gotStruct, options...) {
+		if !cmp.Equal(wantStruct, gotStruct) {
 			t.Errorf("unexpected output on line %d:\n%s", i, cmp.Diff(wantStruct, gotStruct))
 		}
 	}
