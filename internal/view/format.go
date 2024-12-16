@@ -25,7 +25,7 @@ func formatTTL(ttl uint32) string {
 	return fmt.Sprintf("%02ds", seconds)
 }
 
-// formatRecordAsJSON generates a map of DNS record fields for JSON rendering.
+// formatRecordAsJSON generates a map of DNS record fields for JSON rendering
 func formatRecordAsJSON(domain string, answer dns.RR) map[string]interface{} {
 	m := make(map[string]interface{})
 	m["@domain"] = domain
