@@ -3,6 +3,7 @@ package view
 import (
 	"fmt"
 	"net"
+	"os"
 	"testing"
 
 	"github.com/miekg/dns"
@@ -178,7 +179,7 @@ func TestFormatRecord(t *testing.T) {
 			A: net.IPv4(127, 0, 0, 1),
 		}
 
-		t.Setenv("NO_COLOR", "true") // Disable colors for easier testing
+		os.Setenv("NO_COLOR", "true") // Disable colors for easier testing
 
 		r := formatRecord(domain, record)
 		assert.Equal(t, "A\texample.com.\t03m42s\t127.0.0.1", r)
