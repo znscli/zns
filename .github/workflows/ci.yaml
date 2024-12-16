@@ -10,17 +10,22 @@ on:
 
 jobs:
   ci:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a
 
       - name: Run tests
         run: go test ./...
+
+      - name: Run linters
+        uses: golangci/golangci-lint-action@971e284b6050e8a5849b72094c50ab08da042db8
+        with:
+          version: latest
 
       - name: Build binary
         run: go build
