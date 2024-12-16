@@ -2,13 +2,33 @@ package view
 
 import (
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"github.com/fatih/color"
 	"github.com/miekg/dns"
 )
+
+// NewTabWriter initializes and returns a new tabwriter.Writer.
+// ZNS uses this writer to format DNS records into a clear, human-readable table.
+// See https://pkg.go.dev/text/tabwriter#Writer.Init for details.
+func NewTabWriter(w io.Writer, debug bool) *tabwriter.Writer {
+	flags := uint(0)
+	if debug {
+		flags = tabwriter.Debug
+	}
+	return tabwriter.NewWriter(
+		w,
+		0,   // Minwidth
+		8,   // Tabwidth
+		3,   // Padding
+		' ', // Padchar
+		flags,
+	)
+}
 
 // formatTTL converts TTL to a more readable format (hours, minutes, seconds).
 func formatTTL(ttl uint32) string {
@@ -89,8 +109,8 @@ func formatRecord(domainName string, answer dns.RR) string {
 Unknown record type: %s
 
 We encountered an unsupported DNS record type: %s. 
-Please consider raising an issue on GitHub to add support for this record type.
 
+Please consider raising an issue on GitHub to add support for this record type.
 https://github.com/znscli/zns/issues/new
 
 Thank you for your contribution!

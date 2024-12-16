@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"sort"
 	"strings"
@@ -74,7 +73,7 @@ var (
 				vt = arguments.ViewHuman
 			}
 
-			var w io.Writer = os.Stdout
+			var w = view.NewTabWriter(os.Stdout, debug)
 			logFile := os.Getenv("ZNS_LOG_FILE")
 			if logFile != "" {
 				f, err := os.Create(logFile)
@@ -82,7 +81,7 @@ var (
 					panic(fmt.Sprintf("Failed to create log file: %v", err))
 				}
 				defer f.Close()
-				w = f
+				w = view.NewTabWriter(f, debug)
 			}
 
 			v := view.NewRenderer(vt, &view.View{
@@ -152,6 +151,7 @@ var (
 					v.Render(args[0], record)
 				}
 			}
+			w.Flush() // we need to flush the buffer to ensure all data is written to the underlying stream.
 		},
 	}
 )
