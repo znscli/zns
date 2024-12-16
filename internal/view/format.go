@@ -85,24 +85,24 @@ func formatRecord(domainName string, answer dns.RR) string {
 
 	switch rec := answer.(type) {
 	case *dns.A:
-		return fmt.Sprintf("%s\t%s.\t%s\t%s\n", recordType, color.HiBlueString(domainName), formattedTTL, color.HiWhiteString(rec.A.String()))
+		return fmt.Sprintf("%s\t%s.\t%s\t%s", recordType, color.HiBlueString(domainName), formattedTTL, color.HiWhiteString(rec.A.String()))
 	case *dns.AAAA:
-		return fmt.Sprintf("%s\t%s.\t%s\t%s\n", recordType, color.HiBlueString(domainName), formattedTTL, color.HiWhiteString(rec.AAAA.String()))
+		return fmt.Sprintf("%s\t%s.\t%s\t%s", recordType, color.HiBlueString(domainName), formattedTTL, color.HiWhiteString(rec.AAAA.String()))
 	case *dns.CNAME:
-		return fmt.Sprintf("%s\t%s.\t%s\t%s\n", recordType, color.HiBlueString(domainName), formattedTTL, color.HiWhiteString(rec.Target))
+		return fmt.Sprintf("%s\t%s.\t%s\t%s", recordType, color.HiBlueString(domainName), formattedTTL, color.HiWhiteString(rec.Target))
 	case *dns.MX:
 		preference := color.HiRedString(strconv.FormatUint(uint64(rec.Preference), 10))
-		return fmt.Sprintf("%s\t%s.\t%s\t%s %s\n", recordType, color.HiBlueString(domainName), formattedTTL, preference, color.HiWhiteString(rec.Mx))
+		return fmt.Sprintf("%s\t%s.\t%s\t%s %s", recordType, color.HiBlueString(domainName), formattedTTL, preference, color.HiWhiteString(rec.Mx))
 	case *dns.TXT:
 		txtJoined := strings.Join(rec.Txt, " ")
-		return fmt.Sprintf("%s\t%s.\t%s\t%s\n", recordType, color.HiBlueString(domainName), formattedTTL, color.HiWhiteString(txtJoined))
+		return fmt.Sprintf("%s\t%s.\t%s\t%s", recordType, color.HiBlueString(domainName), formattedTTL, color.HiWhiteString(txtJoined))
 	case *dns.NS:
-		return fmt.Sprintf("%s\t%s.\t%s\t%s\n", recordType, color.HiBlueString(domainName), formattedTTL, color.HiWhiteString(rec.Ns))
+		return fmt.Sprintf("%s\t%s.\t%s\t%s", recordType, color.HiBlueString(domainName), formattedTTL, color.HiWhiteString(rec.Ns))
 	case *dns.SOA:
 		primaryNameServer := color.HiRedString(rec.Ns)
-		return fmt.Sprintf("%s\t%s.\t%s\t%s %s\n", recordType, color.HiBlueString(domainName), formattedTTL, primaryNameServer, color.HiWhiteString(rec.Mbox))
+		return fmt.Sprintf("%s\t%s.\t%s\t%s %s", recordType, color.HiBlueString(domainName), formattedTTL, primaryNameServer, color.HiWhiteString(rec.Mbox))
 	case *dns.PTR:
-		return fmt.Sprintf("%s\t%s.\t%s\t%s\n", recordType, color.HiBlueString(domainName), formattedTTL, color.HiWhiteString(rec.Ptr))
+		return fmt.Sprintf("%s\t%s.\t%s\t%s", recordType, color.HiBlueString(domainName), formattedTTL, color.HiWhiteString(rec.Ptr))
 	default:
 		return fmt.Sprintf(`
 Unknown record type: %s
