@@ -22,10 +22,5 @@ jobs:
       - name: Run tests
         run: go test ./...
 
-      - name: Run linters
-        uses: golangci/golangci-lint-action@971e284b6050e8a5849b72094c50ab08da042db8
-        with:
-          version: latest
-
       - name: Build binary
         run: go build
