@@ -12,7 +12,9 @@ import (
 	"github.com/miekg/dns"
 )
 
-// NewTabWriter creates and initializes a tabwriter.Writer.
+// NewTabWriter initializes and returns a new tabwriter.Writer.
+// ZNS uses this writer to format DNS records into a clear, human-readable table.
+// See https://pkg.go.dev/text/tabwriter#Writer.Init for details.
 func NewTabWriter(w io.Writer) *tabwriter.Writer {
 	return tabwriter.NewWriter(
 		w,
