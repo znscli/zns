@@ -15,14 +15,18 @@ import (
 // NewTabWriter initializes and returns a new tabwriter.Writer.
 // ZNS uses this writer to format DNS records into a clear, human-readable table.
 // See https://pkg.go.dev/text/tabwriter#Writer.Init for details.
-func NewTabWriter(w io.Writer) *tabwriter.Writer {
+func NewTabWriter(w io.Writer, debug bool) *tabwriter.Writer {
+	flags := uint(0)
+	if debug {
+		flags = tabwriter.Debug
+	}
 	return tabwriter.NewWriter(
 		w,
 		0,   // Minwidth
 		8,   // Tabwidth
 		3,   // Padding
 		' ', // Padchar
-		0,   // Flags
+		flags,
 	)
 }
 

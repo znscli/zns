@@ -73,7 +73,7 @@ var (
 				vt = arguments.ViewHuman
 			}
 
-			var w = view.NewTabWriter(os.Stdout)
+			var w = view.NewTabWriter(os.Stdout, debug)
 			logFile := os.Getenv("ZNS_LOG_FILE")
 			if logFile != "" {
 				f, err := os.Create(logFile)
@@ -81,7 +81,7 @@ var (
 					panic(fmt.Sprintf("Failed to create log file: %v", err))
 				}
 				defer f.Close()
-				w = view.NewTabWriter(f)
+				w = view.NewTabWriter(f, debug)
 			}
 
 			v := view.NewRenderer(vt, &view.View{
