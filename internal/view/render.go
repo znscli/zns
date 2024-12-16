@@ -5,7 +5,7 @@ import (
 	"github.com/znscli/zns/internal/arguments"
 )
 
-// Renderer interface with a unified Render method
+// Renderer interface with a unified Render method.
 type Renderer interface {
 	Render(domain string, record dns.RR)
 }
@@ -21,7 +21,7 @@ func NewRenderer(vt arguments.ViewType, view *View) Renderer {
 	}
 }
 
-// HumanRenderer for writing human-readable output
+// HumanRenderer for writing human-readable output.
 type HumanRenderer struct {
 	view *View
 }
@@ -29,20 +29,20 @@ type HumanRenderer struct {
 // Validate that HumanRenderer implements the Renderer interface.
 var _ Renderer = (*HumanRenderer)(nil)
 
-// NewHumanRenderer creates a HumanRenderer with a "human" view bound to an output stream
+// NewHumanRenderer creates a HumanRenderer with a "human" view bound to an output stream.
 func NewHumanRenderer(view *View) *HumanRenderer {
 	return &HumanRenderer{
 		view: view,
 	}
 }
 
-// Render renders a DNS record in human-readable format to the output stream
+// Render renders a DNS record in human-readable format to the output stream.
 func (v *HumanRenderer) Render(domain string, record dns.RR) {
 	humanReadable := formatRecord(domain, record)
 	v.view.Stream.Writer.Write([]byte(humanReadable + "\n"))
 }
 
-// JSONRenderer for rendering JSON output
+// JSONRenderer for rendering JSON output.
 type JSONRenderer struct {
 	view *JSONView
 }
@@ -50,20 +50,20 @@ type JSONRenderer struct {
 // Validate that JSONRenderer implements the Renderer interface.
 var _ Renderer = (*JSONRenderer)(nil)
 
-// NewJSONRenderer creates a JSONRenderer with a JSONView bound to an output stream
+// NewJSONRenderer creates a JSONRenderer with a JSONView bound to an output stream.
 func NewJSONRenderer(view *JSONView) *JSONRenderer {
 	return &JSONRenderer{
 		view: view,
 	}
 }
 
-// Render renders a DNS record in JSON format to the output stream
+// Render renders a DNS record in JSON format to the output stream.
 func (v *JSONRenderer) Render(domain string, record dns.RR) {
 	jsonMap := formatRecordAsJSON(domain, record)
 
 	var params []any
 	for key, value := range jsonMap {
-		// Append each key-value pair as separate parameters
+		// Append each key-value pair as separate parameters.
 		params = append(params, key, value)
 	}
 
