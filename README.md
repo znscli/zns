@@ -26,30 +26,30 @@ brew install <coming-soon> 🏗️
 
 ```sh
 $ zns example.com
-A	    example.com.	44m45s	93.184.215.14
-NS	  example.com.	21h07m52s	a.iana-servers.net.
-NS	  example.com.	21h07m52s	b.iana-servers.net.
-SOA	  example.com.	01h00m00s	ns.icann.org. noc.dns.icann.org.
-MX	  example.com.	23h13m58s	0 .
-TXT	  example.com.	21h49m03s	v=spf1 -all
-TXT	  example.com.	21h49m03s wgyf8z8cgvm2qmxpnbnldrcltvk4xqfn
-AAAA	example.com.	09m35s	2606:2800:21f:cb07:6820:80da:af6b:8b2c
+A      example.com.   36m22s      93.184.215.14
+NS     example.com.   22h27m45s   a.iana-servers.net.
+NS     example.com.   22h27m45s   b.iana-servers.net.
+SOA    example.com.   01h00m00s   ns.icann.org. noc.dns.icann.org.
+MX     example.com.   22h00m56s   0 .
+TXT    example.com.   24h00m00s   v=spf1 -all
+TXT    example.com.   24h00m00s   wgyf8z8cgvm2qmxpnbnldrcltvk4xqfn
+AAAA   example.com.   17m11s      2606:2800:21f:cb07:6820:80da:af6b:8b2c
 ```
 
 ### Query a specific record type
 
 ```sh
 $ zns example.com -q NS
-NS	example.com.	19h27m03s	a.iana-servers.net.
-NS	example.com.	19h27m03s	b.iana-servers.net.
+NS   example.com.   21h13m27s   a.iana-servers.net.
+NS   example.com.   21h13m27s   b.iana-servers.net.
 ```
 
 ### Use a specific DNS server
 
 ```sh
 $ zns example.com -q NS --server 1.1.1.1
-NS	example.com.	19h27m03s	a.iana-servers.net.
-NS	example.com.	19h27m03s	b.iana-servers.net.
+NS   example.com.   23h11m50s   a.iana-servers.net.
+NS   example.com.   23h11m50s   b.iana-servers.net
 ```
 
 ### JSON output
@@ -61,8 +61,8 @@ $ zns example.com --json -q A | jq
   "@level": "info",
   "@message": "Successful query",
   "@record": "93.184.215.14",
-  "@timestamp": "2024-11-27T21:33:52.689673+01:00",
-  "@ttl": "28m50s",
+  "@timestamp": "2024-12-17T01:04:06.104173+01:00",
+  "@ttl": "33m10s",
   "@type": "A",
   "@version": "dev",
   "@view": "json"
