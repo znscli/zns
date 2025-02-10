@@ -23,7 +23,7 @@ jobs:
         run: go test ./...
 
       - name: Run linters
-        uses: golangci/golangci-lint-action@971e284b6050e8a5849b72094c50ab08da042db8
+        uses: golangci/golangci-lint-action@2e788936b09dd82dc280e845628a40d2ba6b204c
         with:
           version: latest
 
