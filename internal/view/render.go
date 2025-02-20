@@ -39,7 +39,10 @@ func NewHumanRenderer(view *View) *HumanRenderer {
 // Render renders a DNS record in human-readable format to the output stream.
 func (v *HumanRenderer) Render(domain string, record dns.RR) {
 	humanReadable := formatRecord(domain, record)
-	v.view.Stream.Writer.Write([]byte(humanReadable + "\n"))
+	_, err := v.view.Stream.Writer.Write([]byte(humanReadable + "\n"))
+	if err != nil {
+		panic(err)
+	}
 }
 
 // JSONRenderer for rendering JSON output.
