@@ -25,18 +25,17 @@ changelog:
 brews:
   - tap:
       owner: znscli
-      name: homebrew
+      name: homebrew-tap
     name: zns
     homepage: "https://github.com/znscli/zns"
-    description: "Foobar"
+    description: "A CLI tool for querying DNS records with readable, colored output."
     license: "MIT"
     skip_upload: auto
     commit_author:
-      name: Bruno Schaatsbergen
-      email: bruno@zns.sh
+      name: zns
+      email: releases@zns.sh
     folder: Formula
     install: |-
       bin.install "zns"
     test: |
       system "#{bin}/zns -v"
-
