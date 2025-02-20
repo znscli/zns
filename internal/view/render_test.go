@@ -18,10 +18,13 @@ func TestNewRenderer_human(t *testing.T) {
 	hv := NewRenderer(arguments.ViewHuman, NewView(&b))
 
 	// Check that the view is a HumanRenderer
-	assert.IsType(t, &HumanRenderer{}, hv)
+	humanRenderer, ok := hv.(*HumanRenderer)
+	assert.True(t, ok, "Expected hv to be of type *HumanRenderer")
+
+	assert.IsType(t, &HumanRenderer{}, humanRenderer)
 
 	// Check that the view's stream writer is the same as the buffer
-	assert.Equal(t, &b, hv.(*HumanRenderer).view.Stream.Writer)
+	assert.Equal(t, &b, humanRenderer.view.Stream.Writer)
 }
 
 // TestNewHumanRenderer should simply return a HumanRenderer.
@@ -110,10 +113,11 @@ func TestNewRenderer_JSON(t *testing.T) {
 	jv := NewRenderer(arguments.ViewJSON, NewView(&b))
 
 	// Check that the view is a JSONRenderer
-	assert.IsType(t, &JSONRenderer{}, jv)
+	jsonRenderer, ok := jv.(*JSONRenderer)
+	assert.True(t, ok, "Expected jv to be of type *JSONRenderer")
 
 	// Check that the view's stream writer is the same as the buffer
-	assert.Equal(t, &b, jv.(*JSONRenderer).view.Stream.Writer)
+	assert.Equal(t, &b, jsonRenderer.view.Stream.Writer)
 }
 
 // TestNewJSONRenderer should simply return a JSONRenderer.
