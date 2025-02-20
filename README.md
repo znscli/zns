@@ -2,11 +2,6 @@
 
 zns is a command-line utility for querying DNS records, displaying them in a human-readable, colored format that includes type, name, TTL, and value.
 
-> [!WARNING] 
-> zns is currently under development and does not have a public release yet.
-> We are actively working on the first release and want to ensure it’s functionally stable and enjoyable to use.
-> Thank you for your patience!
-
 ## Features
 
 * Supports various DNS record types
