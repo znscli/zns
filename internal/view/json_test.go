@@ -82,6 +82,9 @@ func testJSONViewOutputEqualsFull(t *testing.T, output string, want []map[string
 			t.Fatal(err)
 		}
 
+		// While we don't control this directly, we can at least ensure that the timestamp
+		// is present and correctly formatted, as expected.
+		// The timestamp is added by the logger, not the JSONView.
 		if timestamp, ok := gotStruct["@timestamp"]; !ok {
 			t.Errorf("message has no timestamp: %#v", gotStruct)
 		} else {
@@ -89,8 +92,12 @@ func testJSONViewOutputEqualsFull(t *testing.T, output string, want []map[string
 			delete(gotStruct, "@timestamp")
 
 			// Verify the timestamp format
-			if _, err := time.Parse(time.RFC3339, timestamp.(string)); err != nil {
-				t.Errorf("error parsing timestamp on line %d: %s", i, err)
+			if str, ok := timestamp.(string); ok {
+				if _, err := time.Parse(time.RFC3339, str); err != nil {
+					t.Errorf("error parsing timestamp on line %d: %s", i, err)
+				}
+			} else {
+				t.Errorf("unexpected type for timestamp on line %d: %T", i, timestamp)
 			}
 		}
 
