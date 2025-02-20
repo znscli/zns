@@ -20,58 +20,45 @@ brew install znscli/tap/zns
 ## Usage
 
 ```sh
-$ zns google.com
-A       google.com.    04m05s       142.251.39.110
-AAAA    google.com.    04m07s       2a00:1450:400e:802::200e
-MX      google.com.    03m32s       10  smtp.google.com.
-NS      google.com.    93h48m24s    ns2.google.com.
-NS      google.com.    93h48m24s    ns3.google.com.
-NS      google.com.    93h48m24s    ns4.google.com.
-NS      google.com.    93h48m24s    ns1.google.com.
-SOA     google.com.    55s          ns1.google.com. dns-admin.google.com.
+$ zns example.com
+A      example.com.   36m22s      93.184.215.14
+NS     example.com.   22h27m45s   a.iana-servers.net.
+NS     example.com.   22h27m45s   b.iana-servers.net.
+SOA    example.com.   01h00m00s   ns.icann.org. noc.dns.icann.org.
+MX     example.com.   22h00m56s   0 .
+TXT    example.com.   24h00m00s   v=spf1 -all
+TXT    example.com.   24h00m00s   wgyf8z8cgvm2qmxpnbnldrcltvk4xqfn
+AAAA   example.com.   17m11s      2606:2800:21f:cb07:6820:80da:af6b:8b2c
 ```
 
 ### Query a specific record type
 
 ```sh
-$ zns google.com -q NS
-NS      google.com.    93h48m24s    ns2.google.com.
-NS      google.com.    93h48m24s    ns3.google.com.
-NS      google.com.    93h48m24s    ns4.google.com.
-NS      google.com.    93h48m24s    ns1.google.com.
+$ zns example.com -q NS
+NS   example.com.   21h13m27s   a.iana-servers.net.
+NS   example.com.   21h13m27s   b.iana-servers.net.
 ```
 
 ### Use a specific DNS server
 
 ```sh
-$ zns google.com -q NS --server 1.1.1.1
-NS      google.com.    93h48m24s    ns2.google.com.
-NS      google.com.    93h48m24s    ns3.google.com.
-NS      google.com.    93h48m24s    ns4.google.com.
-NS      google.com.    93h48m24s    ns1.google.com.
+$ zns example.com -q NS --server 1.1.1.1
+NS   example.com.   23h11m50s   a.iana-servers.net.
+NS   example.com.   23h11m50s   b.iana-servers.net
 ```
 
 ### JSON output
 
 ```sh
-$ zns google.com --json | jq
+$ zns example.com --json -q A | jq
 {
-  "@domain": "google.com",
+  "@domain": "example.com",
   "@level": "info",
-  "@record": "142.250.179.206",
-  "@timestamp": "2024-11-26T12:48:01.400203+01:00",
-  "@ttl": "04m02s",
+  "@message": "Successful query",
+  "@record": "93.184.215.14",
+  "@timestamp": "2024-12-17T01:04:06.104173+01:00",
+  "@ttl": "33m10s",
   "@type": "A",
-  "@version": "dev",
-  "@view": "json"
-},
-{
-  "@domain": "google.com",
-  "@level": "info",
-  "@record": "ns2.google.com.",
-  "@timestamp": "2024-11-26T12:48:01.401724+01:00",
-  "@ttl": "93h46m51s",
-  "@type": "NS",
   "@version": "dev",
   "@view": "json"
 }
@@ -82,7 +69,7 @@ $ zns google.com --json | jq
 
 ```sh
 export ZNS_LOG_FILE=/tmp/zns.log
-$ zns google.com
+$ zns example.com
 ```
 
 ## Contributing

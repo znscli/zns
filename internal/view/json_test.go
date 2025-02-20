@@ -56,7 +56,7 @@ func TestNewJSONView_params(t *testing.T) {
 // against a slice of structs representing the desired log messages. It
 // verifies that the output of JSONView is in JSON log format, one message per
 // line.
-func testJSONViewOutputEqualsFull(t *testing.T, output string, want []map[string]interface{}, options ...cmp.Option) {
+func testJSONViewOutputEqualsFull(t *testing.T, output string, want []map[string]interface{}) {
 	t.Helper()
 
 	// Remove final trailing newline
@@ -82,6 +82,9 @@ func testJSONViewOutputEqualsFull(t *testing.T, output string, want []map[string
 			t.Fatal(err)
 		}
 
+		// While we don't control this directly, we can at least ensure that the timestamp
+		// is present and correctly formatted, as expected.
+		// The timestamp is added by the logger, not the JSONView.
 		if timestamp, ok := gotStruct["@timestamp"]; !ok {
 			t.Errorf("message has no timestamp: %#v", gotStruct)
 		} else {
@@ -89,12 +92,16 @@ func testJSONViewOutputEqualsFull(t *testing.T, output string, want []map[string
 			delete(gotStruct, "@timestamp")
 
 			// Verify the timestamp format
-			if _, err := time.Parse(time.RFC3339, timestamp.(string)); err != nil {
-				t.Errorf("error parsing timestamp on line %d: %s", i, err)
+			if str, ok := timestamp.(string); ok {
+				if _, err := time.Parse(time.RFC3339, str); err != nil {
+					t.Errorf("error parsing timestamp on line %d: %s", i, err)
+				}
+			} else {
+				t.Errorf("unexpected type for timestamp on line %d: %T", i, timestamp)
 			}
 		}
 
-		if !cmp.Equal(wantStruct, gotStruct, options...) {
+		if !cmp.Equal(wantStruct, gotStruct) {
 			t.Errorf("unexpected output on line %d:\n%s", i, cmp.Diff(wantStruct, gotStruct))
 		}
 	}
