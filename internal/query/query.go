@@ -22,25 +22,17 @@ var (
 	}
 )
 
-// Querier is an interface for querying DNS records.
-type Querier interface {
-	Query(domain string, qtype uint16) (*dns.Msg, error)
-	MultiQuery(domain string, qtypes []uint16) ([]*dns.Msg, error)
-}
-
-// Query implements the Querier interface.
-type Query struct {
+type QueryClient struct {
 	Server string
 	hclog.Logger
 }
 
-// NewQuerier creates a new Querier with the specified server.
-func NewQuerier(server string, logger hclog.Logger) Querier {
-	return &Query{Server: server, Logger: logger}
+func NewQueryClient(server string, logger hclog.Logger) *QueryClient {
+	return &QueryClient{Server: server, Logger: logger}
 }
 
 // MultiQuery performs DNS queries for multiple types concurrently.
-func (q *Query) MultiQuery(domain string, qtypes []uint16) ([]*dns.Msg, error) {
+func (q *QueryClient) MultiQuery(domain string, qtypes []uint16) ([]*dns.Msg, error) {
 	var errors *multierror.Error
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -65,7 +57,7 @@ func (q *Query) MultiQuery(domain string, qtypes []uint16) ([]*dns.Msg, error) {
 }
 
 // Query performs the DNS query and returns the response and any error encountered.
-func (q *Query) Query(domain string, qtype uint16) (*dns.Msg, error) {
+func (q *QueryClient) Query(domain string, qtype uint16) (*dns.Msg, error) {
 	msg := new(dns.Msg)
 	msg.SetQuestion(dns.Fqdn(domain), qtype)
 
