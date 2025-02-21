@@ -106,11 +106,9 @@ var (
 				JSONFormat:           json,
 			}).With("@domain", args[0])
 
-			// Log the debug state and current log level.
 			logger.Debug("Debug logging enabled", "debug", debug)
 			logger.Debug("Log level", "level", logger.GetLevel())
 
-			// Log the arguments and flags
 			logger.Debug("Args", "args", args)
 			logger.Debug("Flags", "server", server, "qtype", qtype, "debug", debug)
 
@@ -140,18 +138,17 @@ var (
 				}
 			}
 
-			// Create a new querier.
 			querier := query.NewQueryClient(fmt.Sprintf("%s:53", server), logger)
 
 			logger.Debug("Creating querier", "server", server, "qtype", qtype, "domain", args[0])
 
-			// Prepare query types.
+			// Create a slice of supported query types to query.
 			qtypes := make([]uint16, 0, len(query.QueryTypes))
 			for _, qtype := range query.QueryTypes {
 				qtypes = append(qtypes, qtype)
 			}
 
-			// Set specific query type if provided.
+			// Filter down to the specified query type, if provided.
 			if qtype != "" {
 				qtypeInt, ok := query.QueryTypes[strings.ToUpper(qtype)]
 				if !ok {
@@ -160,7 +157,6 @@ var (
 				qtypes = []uint16{qtypeInt}
 			}
 
-			// Execute the queries.
 			messages, err := querier.MultiQuery(args[0], qtypes)
 			if err != nil {
 				if merr, ok := err.(*multierror.Error); ok {
