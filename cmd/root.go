@@ -141,7 +141,7 @@ var (
 			}
 
 			// Create a new querier.
-			querier := query.NewQuerier(fmt.Sprintf("%s:53", server), logger)
+			querier := query.NewQueryClient(fmt.Sprintf("%s:53", server), logger)
 
 			logger.Debug("Creating querier", "server", server, "qtype", qtype, "domain", args[0])
 
