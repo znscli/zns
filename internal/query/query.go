@@ -2,6 +2,7 @@ package query
 
 import (
 	"sync"
+	"time"
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-multierror"
@@ -22,8 +23,13 @@ var (
 	}
 )
 
+type DNSClient interface {
+	Exchange(*dns.Msg, string) (*dns.Msg, time.Duration, error)
+}
+
 type QueryClient struct {
 	Server string
+	Client DNSClient
 	hclog.Logger
 }
 
@@ -43,7 +49,7 @@ func (q *QueryClient) MultiQuery(domain string, qtypes []uint16) ([]*dns.Msg, er
 		wg.Add(1)
 		go func(i int, qtype uint16) {
 			defer wg.Done()
-			msg, err := q.Query(domain, qtype)
+			msg, err := q.query(domain, qtype)
 			mu.Lock()
 			messages[i] = msg
 			errors = multierror.Append(errors, err)
@@ -56,15 +62,14 @@ func (q *QueryClient) MultiQuery(domain string, qtypes []uint16) ([]*dns.Msg, er
 	return messages, errors.ErrorOrNil()
 }
 
-// Query performs the DNS query and returns the response and any error encountered.
-func (q *QueryClient) Query(domain string, qtype uint16) (*dns.Msg, error) {
+// query performs the DNS query and returns the response and any error encountered.
+func (q *QueryClient) query(domain string, qtype uint16) (*dns.Msg, error) {
 	msg := new(dns.Msg)
 	msg.SetQuestion(dns.Fqdn(domain), qtype)
 
 	q.Logger.Debug("Querying DNS server", "server", q.Server, "domain", domain, "qtype", dns.TypeToString[qtype])
 
-	client := new(dns.Client)
-	resp, rtt, err := client.Exchange(msg, q.Server)
+	resp, rtt, err := q.Client.Exchange(msg, q.Server)
 	if err != nil {
 		return nil, err
 	}
