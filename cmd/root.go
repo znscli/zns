@@ -3,15 +3,21 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"sort"
 	"strings"
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-multierror"
+	"github.com/miekg/dns"
 	"github.com/spf13/cobra"
 	"github.com/znscli/zns/internal/arguments"
 	"github.com/znscli/zns/internal/query"
 	"github.com/znscli/zns/internal/view"
+)
+
+const (
+	resolveConfPath = "/etc/resolv.conf"
 )
 
 var (
@@ -78,7 +84,8 @@ var (
 			if logFile != "" {
 				f, err := os.Create(logFile)
 				if err != nil {
-					panic(fmt.Sprintf("Failed to create log file: %v", err))
+					fmt.Printf("error: failed to create log file: %v\n", err)
+					os.Exit(1)
 				}
 				defer f.Close()
 				w = view.NewTabWriter(f, debug)
@@ -107,6 +114,35 @@ var (
 			// Log the arguments and flags
 			logger.Debug("Args", "args", args)
 			logger.Debug("Flags", "server", server, "qtype", qtype, "debug", debug)
+
+			// Resolve the DNS nameserver from the host.
+			// Supported only on Unix-like systems.
+			// On Windows, dynamic DNS resolution is not supported;
+			// a DNS nameserver must be explicitly specified using the --server flag.
+			if server == "" {
+				switch runtime.GOOS {
+				case "windows":
+					fmt.Println("error: host DNS nameserver resolution is not supported on Windows. Please specify a DNS nameserver using the --server flag.")
+					os.Exit(1)
+				default:
+					logger.Debug(fmt.Sprintf("Resolving DNS nameserver from \"%s\"", resolveConfPath), "path", resolveConfPath)
+
+					// Attempt to retrieve the DNS nameserver from `/etc/resolv.conf`
+					conf, err := dns.ClientConfigFromFile(resolveConfPath)
+					if err != nil {
+						fmt.Printf("error: failed to load DNS nameserver configuration from %s: %v\n", resolveConfPath, err)
+						os.Exit(1)
+					}
+
+					if len(conf.Servers) == 0 {
+						fmt.Printf("error: no DNS nameservers found in %s\n", resolveConfPath)
+						os.Exit(1)
+					}
+
+					server = conf.Servers[0] // Use the first available DNS nameserver
+					logger.Debug(fmt.Sprintf("Using DNS nameserver %s", server), "server", server, "path", resolveConfPath)
+				}
+			}
 
 			// Create a new querier
 			querier := query.NewQuerier(fmt.Sprintf("%s:53", server), logger)
@@ -158,7 +194,7 @@ var (
 
 func init() {
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
-	rootCmd.Flags().StringVarP(&server, "server", "s", "1.1.1.1", "DNS server to query")
+	rootCmd.Flags().StringVarP(&server, "server", "s", "", "DNS server to query")
 	rootCmd.Flags().StringVarP(&qtype, "query-type", "q", "", "DNS query type")
 	rootCmd.Flags().BoolVar(&debug, "debug", false, "If set, debug output is printed")
 	rootCmd.Flags().BoolVar(&json, "json", false, "If set, output is printed in JSON format.")
