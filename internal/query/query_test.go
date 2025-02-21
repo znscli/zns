@@ -153,12 +153,13 @@ func TestQueryClient_MultiQuery_TypeAssert_MultiError(t *testing.T) {
 	// Because MultiQuery returns a multierror.Error, we assert that the error is of that type.
 	assert.IsType(t, &multierror.Error{}, err)
 
-	// We also assert that the error contains two errors, as we are querying two different types.
-	assert.Equal(t, 2, len(err.(*multierror.Error).Errors))
+	// We can then type assert the error to a *multierror.Error and introspect the individual errors.
+	if err, ok := err.(*multierror.Error); ok {
+		// Assert that two errors are returned (one for each query type).
+		assert.Equal(t, 2, len(err.Errors))
 
-	// Similarly, we can assert the error messages.
-	for _, e := range err.(*multierror.Error).Errors {
-		assert.NotNil(t, e)
-		assert.Equal(t, "it's always DNS", e.Error())
+		for _, e := range err.Errors {
+			assert.Equal(t, "it's always DNS", e.Error())
+		}
 	}
 }
