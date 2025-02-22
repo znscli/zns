@@ -55,19 +55,19 @@ func TestQueryClient_Query(t *testing.T) {
 
 func TestQueryClient_Query_Domain(t *testing.T) {
 	mockDNSClient := &MockDNSClient{}
-	client := NewQueryClient("1.1.1.1", mockDNSClient, hclog.NewNullLogger())
+	client := NewQueryClient("8.8.8.8", mockDNSClient, hclog.NewNullLogger())
 
-	_, err := client.query("abc.xyz", dns.TypeA)
+	_, err := client.query("example.com", dns.TypeA)
 
 	assert.NoError(t, err)
-	assert.Equal(t, "abc.xyz.", mockDNSClient.ReceivedDomain)
+	assert.Equal(t, "example.com.", mockDNSClient.ReceivedDomain)
 }
 
 func TestQueryClient_Query_QueryType(t *testing.T) {
 	mockDNSClient := &MockDNSClient{}
-	client := NewQueryClient("1.1.1.1", mockDNSClient, hclog.NewNullLogger())
+	client := NewQueryClient("8.8.8.8", mockDNSClient, hclog.NewNullLogger())
 
-	_, err := client.query("abc.xyz", dns.TypeCNAME)
+	_, err := client.query("example.com", dns.TypeCNAME)
 
 	assert.NoError(t, err)
 	assert.Equal(t, dns.TypeCNAME, mockDNSClient.QueryType)
@@ -96,28 +96,28 @@ func TestQueryClient_MultiQuery(t *testing.T) {
 
 func TestQueryClient_MultiQuery_Domain(t *testing.T) {
 	mockDNSClient := &MockDNSClient{}
-	client := NewQueryClient("1.1.1.1", mockDNSClient, hclog.NewNullLogger())
+	client := NewQueryClient("8.8.8.8", mockDNSClient, hclog.NewNullLogger())
 
-	_, err := client.MultiQuery("abc.xyz", []uint16{dns.TypeA, dns.TypeMX})
+	_, err := client.MultiQuery("example.com", []uint16{dns.TypeA, dns.TypeMX})
 
 	assert.NoError(t, err)
-	assert.Equal(t, "abc.xyz.", mockDNSClient.ReceivedDomain)
+	assert.Equal(t, "example.com.", mockDNSClient.ReceivedDomain)
 }
 
 func TestQueryClient_MultiQuery_Error(t *testing.T) {
 	mockDNSClientWithError := &MockDNSClientWithError{}
-	client := NewQueryClient("1.1.1.1", mockDNSClientWithError, hclog.NewNullLogger())
+	client := NewQueryClient("8.8.8.8", mockDNSClientWithError, hclog.NewNullLogger())
 
-	_, err := client.MultiQuery("1", []uint16{dns.TypeA, dns.TypeMX})
+	_, err := client.MultiQuery("example.com", []uint16{dns.TypeA, dns.TypeMX})
 
 	assert.Error(t, err)
 }
 
 func TestQueryClient_MultiQuery_TypeAssert_MultiError(t *testing.T) {
 	mockDNSClientWithError := &MockDNSClientWithError{}
-	client := NewQueryClient("1.1.1.1", mockDNSClientWithError, hclog.NewNullLogger())
+	client := NewQueryClient("8.8.8.8", mockDNSClientWithError, hclog.NewNullLogger())
 
-	_, err := client.MultiQuery("1", []uint16{dns.TypeA, dns.TypeMX})
+	_, err := client.MultiQuery("example.com", []uint16{dns.TypeA, dns.TypeMX})
 
 	assert.Error(t, err)
 	assert.IsType(t, &multierror.Error{}, err)
