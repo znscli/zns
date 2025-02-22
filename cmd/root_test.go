@@ -152,8 +152,8 @@ func Test_Cmd_LogFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	assert.Contains(t, string(logFile), "A       example.com.   1m00s   93.184.216.34")
-	assert.Contains(t, string(logFile), "CNAME   example.com.   1m00s   example.org")
+	assert.Contains(t, string(logFile), "A       example.com.   01m00s   93.184.216.34")
+	assert.Contains(t, string(logFile), "CNAME   example.com.   01m00s   example.org.")
 }
 
 func Test_Cmd_LogFile_Debug(t *testing.T) {
@@ -184,6 +184,6 @@ func Test_Cmd_LogFile_Debug(t *testing.T) {
 	assert.Contains(t, string(logFile), "Querying DNS server: @domain=example.com server=127.0.0.1:53535 domain=example.com qtype=CNAME")
 	assert.Contains(t, string(logFile), "Received DNS response: @domain=example.com server=127.0.0.1:53535 domain=example.com qtype=A rcode=NOERROR")
 	assert.Contains(t, string(logFile), "Received DNS response: @domain=example.com server=127.0.0.1:53535 domain=example.com qtype=CNAME rcode=NOERROR")
-	assert.Contains(t, string(logFile), "A       |example.com.   |1m00s   |93.184.216.34")
-	assert.Contains(t, string(logFile), "CNAME   |example.com.   |1m00s   |example.org")
+	assert.Contains(t, string(logFile), "A       |example.com.   |01m00s   |93.184.216.34")
+	assert.Contains(t, string(logFile), "CNAME   |example.com.   |01m00s   |example.org.")
 }
