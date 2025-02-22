@@ -8,6 +8,10 @@ issues:
       linters:
         - funlen
 
+    - source: "^func NewRootCommand"
+      linters:
+        - funlen
+
 linters:
   disable-all: true
   enable:

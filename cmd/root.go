@@ -21,16 +21,16 @@ const (
 )
 
 var (
-	version string
-
+	version = "dev"
 	debug   bool
 	json    bool
 	noColor bool
+	server  string
+	qtype   string
+)
 
-	server string
-	qtype  string
-
-	rootCmd = &cobra.Command{
+func NewRootCommand() *cobra.Command {
+	cmd := &cobra.Command{
 		Use:   "zns",
 		Short: "zns is a command-line utility for querying DNS records and displaying them in human- or machine-readable formats.",
 		Long:  "zns is a command-line utility for querying DNS records, displaying them in a human-readable, colored format that includes type, name, TTL, and value. It supports various DNS record types, concurrent queries for improved performance, JSON output format for machine-readable results, and options to write output to a file or query a specific DNS server.",
@@ -138,7 +138,13 @@ var (
 				}
 			}
 
-			querier := query.NewQueryClient(fmt.Sprintf("%s:53", server), new(dns.Client), logger)
+			// If the server address does not already include a port,
+			// append the default DNS port (53) to it.
+			if !strings.Contains(server, ":") {
+				server = fmt.Sprintf("%s:53", server)
+			}
+
+			querier := query.NewQueryClient(server, new(dns.Client), logger)
 
 			logger.Debug("Creating querier", "server", server, "qtype", qtype, "domain", args[0])
 
@@ -181,17 +187,18 @@ var (
 			return nil
 		},
 	}
-)
 
-func init() {
-	rootCmd.CompletionOptions.DisableDefaultCmd = true
-	rootCmd.Flags().StringVarP(&server, "server", "s", "", "DNS server to query")
-	rootCmd.Flags().StringVarP(&qtype, "query-type", "q", "", "DNS query type")
-	rootCmd.Flags().BoolVar(&debug, "debug", false, "If set, debug output is printed")
-	rootCmd.Flags().BoolVar(&json, "json", false, "If set, output is printed in JSON format.")
+	cmd.CompletionOptions.DisableDefaultCmd = true
+	cmd.Flags().StringVarP(&server, "server", "s", "", "DNS server to query")
+	cmd.Flags().StringVarP(&qtype, "query-type", "q", "", "DNS query type")
+	cmd.Flags().BoolVar(&debug, "debug", false, "Enable debug output")
+	cmd.Flags().BoolVar(&json, "json", false, "Output in JSON format")
+
+	return cmd
 }
 
 func Execute() {
+	rootCmd := NewRootCommand()
 	if err := rootCmd.Execute(); err != nil {
 		if merr, ok := err.(*multierror.Error); ok {
 			for _, e := range merr.Errors {
