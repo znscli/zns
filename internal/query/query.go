@@ -33,8 +33,14 @@ type QueryClient struct {
 	hclog.Logger
 }
 
-func NewQueryClient(server string, logger hclog.Logger) *QueryClient {
-	return &QueryClient{Server: server, Logger: logger}
+// NewQueryClient initializes a QueryClient with the given DNS server, client, and logger.
+// The provided client must implement the Exchange method for DNS queries.
+func NewQueryClient(server string, client DNSClient, logger hclog.Logger) *QueryClient {
+	return &QueryClient{
+		Server: server,
+		Client: client,
+		Logger: logger,
+	}
 }
 
 // MultiQuery performs DNS queries for multiple types concurrently.
