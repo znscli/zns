@@ -21,16 +21,16 @@ const (
 )
 
 var (
-	version string
-
+	version = "dev"
 	debug   bool
 	json    bool
 	noColor bool
+	server  string
+	qtype   string
+)
 
-	server string
-	qtype  string
-
-	rootCmd = &cobra.Command{
+func NewRootCommand() *cobra.Command {
+	cmd := &cobra.Command{
 		Use:   "zns",
 		Short: "zns is a command-line utility for querying DNS records and displaying them in human- or machine-readable formats.",
 		Long:  "zns is a command-line utility for querying DNS records, displaying them in a human-readable, colored format that includes type, name, TTL, and value. It supports various DNS record types, concurrent queries for improved performance, JSON output format for machine-readable results, and options to write output to a file or query a specific DNS server.",
@@ -106,11 +106,9 @@ var (
 				JSONFormat:           json,
 			}).With("@domain", args[0])
 
-			// Log the debug state and current log level.
 			logger.Debug("Debug logging enabled", "debug", debug)
 			logger.Debug("Log level", "level", logger.GetLevel())
 
-			// Log the arguments and flags
 			logger.Debug("Args", "args", args)
 			logger.Debug("Flags", "server", server, "qtype", qtype, "debug", debug)
 
@@ -140,18 +138,23 @@ var (
 				}
 			}
 
-			// Create a new querier.
-			querier := query.NewQueryClient(fmt.Sprintf("%s:53", server), logger)
+			// If the server address does not already include a port,
+			// append the default DNS port (53) to it.
+			if !strings.Contains(server, ":") {
+				server = fmt.Sprintf("%s:53", server)
+			}
+
+			querier := query.NewQueryClient(server, new(dns.Client), logger)
 
 			logger.Debug("Creating querier", "server", server, "qtype", qtype, "domain", args[0])
 
-			// Prepare query types.
+			// Create a slice of supported query types to query.
 			qtypes := make([]uint16, 0, len(query.QueryTypes))
 			for _, qtype := range query.QueryTypes {
 				qtypes = append(qtypes, qtype)
 			}
 
-			// Set specific query type if provided.
+			// Filter down to the specified query type, if provided.
 			if qtype != "" {
 				qtypeInt, ok := query.QueryTypes[strings.ToUpper(qtype)]
 				if !ok {
@@ -160,7 +163,6 @@ var (
 				qtypes = []uint16{qtypeInt}
 			}
 
-			// Execute the queries.
 			messages, err := querier.MultiQuery(args[0], qtypes)
 			if err != nil {
 				if merr, ok := err.(*multierror.Error); ok {
@@ -185,17 +187,18 @@ var (
 			return nil
 		},
 	}
-)
 
-func init() {
-	rootCmd.CompletionOptions.DisableDefaultCmd = true
-	rootCmd.Flags().StringVarP(&server, "server", "s", "", "DNS server to query")
-	rootCmd.Flags().StringVarP(&qtype, "query-type", "q", "", "DNS query type")
-	rootCmd.Flags().BoolVar(&debug, "debug", false, "If set, debug output is printed")
-	rootCmd.Flags().BoolVar(&json, "json", false, "If set, output is printed in JSON format.")
+	cmd.CompletionOptions.DisableDefaultCmd = true
+	cmd.Flags().StringVarP(&server, "server", "s", "", "DNS server to query")
+	cmd.Flags().StringVarP(&qtype, "query-type", "q", "", "DNS query type")
+	cmd.Flags().BoolVar(&debug, "debug", false, "Enable debug output")
+	cmd.Flags().BoolVar(&json, "json", false, "Output in JSON format")
+
+	return cmd
 }
 
 func Execute() {
+	rootCmd := NewRootCommand()
 	if err := rootCmd.Execute(); err != nil {
 		if merr, ok := err.(*multierror.Error); ok {
 			for _, e := range merr.Errors {
