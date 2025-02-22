@@ -76,7 +76,7 @@ func Test_Cmd(t *testing.T) {
 	t.Setenv("NO_COLOR", "1") // Disable color codes for easier testing
 
 	rootCmd := NewRootCommand()
-	rootCmd.SetArgs([]string{"example.com", "--server", fmt.Sprintf("127.0.0.01:%d", DNSServerPort)})
+	rootCmd.SetArgs([]string{"example.com", "--server", fmt.Sprintf("127.0.0.1:%d", DNSServerPort)})
 
 	err := rootCmd.Execute()
 
@@ -87,7 +87,7 @@ func Test_Cmd_Error(t *testing.T) {
 	t.Setenv("NO_COLOR", "1") // Disable color codes for easier testing
 
 	rootCmd := NewRootCommand()
-	rootCmd.SetArgs([]string{"--server", fmt.Sprintf("127.0.0.01:%d", DNSServerPort)})
+	rootCmd.SetArgs([]string{"--server", fmt.Sprintf("127.0.0.1:%d", DNSServerPort)})
 
 	err := rootCmd.Execute()
 
@@ -99,7 +99,7 @@ func Test_Cmd_JSON(t *testing.T) {
 	t.Setenv("NO_COLOR", "1") // Disable color codes for easier testing
 
 	rootCmd := NewRootCommand()
-	rootCmd.SetArgs([]string{"example.com", "--json", "--server", fmt.Sprintf("127.0.0.01:%d", DNSServerPort)})
+	rootCmd.SetArgs([]string{"example.com", "--json", "--server", fmt.Sprintf("127.0.0.1:%d", DNSServerPort)})
 
 	err := rootCmd.Execute()
 
@@ -110,7 +110,7 @@ func Test_Cmd_QueryType(t *testing.T) {
 	t.Setenv("NO_COLOR", "1") // Disable color codes for easier testing
 
 	rootCmd := NewRootCommand()
-	rootCmd.SetArgs([]string{"example.com", "--server", fmt.Sprintf("127.0.0.01:%d", DNSServerPort), "--query-type", "A"})
+	rootCmd.SetArgs([]string{"example.com", "--server", fmt.Sprintf("127.0.0.1:%d", DNSServerPort), "--query-type", "A"})
 
 	err := rootCmd.Execute()
 
@@ -121,7 +121,7 @@ func Test_Cmd_Debug(t *testing.T) {
 	t.Setenv("NO_COLOR", "1") // Disable color codes for easier testing
 
 	rootCmd := NewRootCommand()
-	rootCmd.SetArgs([]string{"example.com", "--debug", "--server", fmt.Sprintf("127.0.0.01:%d", DNSServerPort), "--query-type", "A"})
+	rootCmd.SetArgs([]string{"example.com", "--debug", "--server", fmt.Sprintf("127.0.0.1:%d", DNSServerPort), "--query-type", "A"})
 
 	err := rootCmd.Execute()
 
@@ -140,7 +140,7 @@ func Test_Cmd_LogFile(t *testing.T) {
 	t.Setenv("ZNS_LOG_FILE", file.Name())
 
 	rootCmd := NewRootCommand()
-	rootCmd.SetArgs([]string{"example.com", "--server", fmt.Sprintf("127.0.0.01:%d", DNSServerPort)})
+	rootCmd.SetArgs([]string{"example.com", "--server", fmt.Sprintf("127.0.0.1:%d", DNSServerPort)})
 
 	err = rootCmd.Execute()
 	assert.NoError(t, err)
@@ -152,8 +152,8 @@ func Test_Cmd_LogFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	assert.Contains(t, string(logFile), "A       example.com.   01m00s   93.184.216.34")
-	assert.Contains(t, string(logFile), "CNAME   example.com.   01m00s   example.org")
+	assert.Contains(t, string(logFile), "A       example.com.   1m00s   93.184.216.34")
+	assert.Contains(t, string(logFile), "CNAME   example.com.   1m00s   example.org")
 }
 
 func Test_Cmd_LogFile_Debug(t *testing.T) {
@@ -168,7 +168,7 @@ func Test_Cmd_LogFile_Debug(t *testing.T) {
 	t.Setenv("ZNS_LOG_FILE", file.Name())
 
 	rootCmd := NewRootCommand()
-	rootCmd.SetArgs([]string{"example.com", "--debug", "--server", fmt.Sprintf("127.0.0.01:%d", DNSServerPort)})
+	rootCmd.SetArgs([]string{"example.com", "--debug", "--server", fmt.Sprintf("127.0.0.1:%d", DNSServerPort)})
 
 	err = rootCmd.Execute()
 	assert.NoError(t, err)
@@ -180,10 +180,10 @@ func Test_Cmd_LogFile_Debug(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	assert.Contains(t, string(logFile), "Querying DNS server: @domain=example.com server=127.0.0.01:53535 domain=example.com qtype=A")
-	assert.Contains(t, string(logFile), "Querying DNS server: @domain=example.com server=127.0.0.01:53535 domain=example.com qtype=CNAME")
-	assert.Contains(t, string(logFile), "Received DNS response: @domain=example.com server=127.0.0.01:53535 domain=example.com qtype=A rcode=NOERROR")
-	assert.Contains(t, string(logFile), "Received DNS response: @domain=example.com server=127.0.0.01:53535 domain=example.com qtype=CNAME rcode=NOERROR")
-	assert.Contains(t, string(logFile), "A       |example.com.   |01m00s   |93.184.216.34")
-	assert.Contains(t, string(logFile), "CNAME   |example.com.   |01m00s   |example.org")
+	assert.Contains(t, string(logFile), "Querying DNS server: @domain=example.com server=127.0.0.1:53535 domain=example.com qtype=A")
+	assert.Contains(t, string(logFile), "Querying DNS server: @domain=example.com server=127.0.0.1:53535 domain=example.com qtype=CNAME")
+	assert.Contains(t, string(logFile), "Received DNS response: @domain=example.com server=127.0.0.1:53535 domain=example.com qtype=A rcode=NOERROR")
+	assert.Contains(t, string(logFile), "Received DNS response: @domain=example.com server=127.0.0.1:53535 domain=example.com qtype=CNAME rcode=NOERROR")
+	assert.Contains(t, string(logFile), "A       |example.com.   |1m00s   |93.184.216.34")
+	assert.Contains(t, string(logFile), "CNAME   |example.com.   |1m00s   |example.org")
 }
