@@ -69,7 +69,7 @@ func dnsHandler(w dns.ResponseWriter, r *dns.Msg) {
 		}
 	}
 
-	w.WriteMsg(&msg)
+	_ = w.WriteMsg(&msg)
 }
 
 func Test_Cmd(t *testing.T) {
@@ -131,7 +131,7 @@ func Test_Cmd_Debug(t *testing.T) {
 func Test_Cmd_LogFile(t *testing.T) {
 	t.Setenv("NO_COLOR", "1") // Disable color codes for easier testing
 
-	file, err := os.CreateTemp("", "zns")
+	file, err := os.CreateTemp(t.TempDir(), "zns")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +159,7 @@ func Test_Cmd_LogFile(t *testing.T) {
 func Test_Cmd_LogFile_Debug(t *testing.T) {
 	t.Setenv("NO_COLOR", "1") // Disable color codes for easier testing
 
-	file, err := os.CreateTemp("", "zns")
+	file, err := os.CreateTemp(t.TempDir(), "zns")
 	if err != nil {
 		t.Fatal(err)
 	}
