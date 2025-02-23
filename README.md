@@ -14,7 +14,7 @@ zns is a command-line utility for querying DNS records, displaying them in a hum
 ## Installing
 
 ```sh
-brew install znscli/tap/zns
+brew install zns
 ```
 
 ## Usage
