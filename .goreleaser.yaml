@@ -21,21 +21,3 @@ changelog:
   sort: "asc"
   filters:
     exclude: ["^docs:", "demo", "^hugo:", "Merge pull request", "Merge branch"]
-
-brews:
-  - tap:
-      owner: znscli
-      name: homebrew-tap
-    name: zns
-    homepage: "https://github.com/znscli/zns"
-    description: "A CLI tool for querying DNS records with readable, colored output."
-    license: "MIT"
-    skip_upload: auto
-    commit_author:
-      name: zns
-      email: releases@zns.sh
-    folder: Formula
-    install: |-
-      bin.install "zns"
-    test: |
-      system "#{bin}/zns -v"
