@@ -1,6 +1,6 @@
 module github.com/znscli/zns
 
-go 1.23.1
+go 1.24.0
 
 require (
 	github.com/fatih/color v1.18.0
