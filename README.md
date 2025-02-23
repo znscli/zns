@@ -19,58 +19,23 @@ brew install znscli/tap/zns
 
 ## Usage
 
-```sh
-$ zns example.com
-A      example.com.   36m22s      93.184.215.14
-NS     example.com.   22h27m45s   a.iana-servers.net.
-NS     example.com.   22h27m45s   b.iana-servers.net.
-SOA    example.com.   01h00m00s   ns.icann.org. noc.dns.icann.org.
-MX     example.com.   22h00m56s   0 .
-TXT    example.com.   24h00m00s   v=spf1 -all
-TXT    example.com.   24h00m00s   wgyf8z8cgvm2qmxpnbnldrcltvk4xqfn
-AAAA   example.com.   17m11s      2606:2800:21f:cb07:6820:80da:af6b:8b2c
-```
+![zns example.com](./assets/basic.png)
 
 ### Query a specific record type
 
-```sh
-$ zns example.com -q NS
-NS   example.com.   21h13m27s   a.iana-servers.net.
-NS   example.com.   21h13m27s   b.iana-servers.net.
-```
+![zns example.com -q NS](./assets/basic-q.png)
 
 ### Use a specific DNS server
 
-```sh
-$ zns example.com -q NS --server 1.1.1.1
-NS   example.com.   23h11m50s   a.iana-servers.net.
-NS   example.com.   23h11m50s   b.iana-servers.net
-```
+![zns example.com -q NS --server 1.1.1.1](./assets/basic-q-s.png)
 
 ### JSON output
 
-```sh
-$ zns example.com --json -q A | jq
-{
-  "@domain": "example.com",
-  "@level": "info",
-  "@message": "Successful query",
-  "@record": "93.184.215.14",
-  "@timestamp": "2024-12-17T01:04:06.104173+01:00",
-  "@ttl": "33m10s",
-  "@type": "A",
-  "@version": "dev",
-  "@view": "json"
-}
-...
-```
+![zns example.com --json -q A | jq](./assets/basic-json.png)
 
 ### Writing to a file
 
-```sh
-export ZNS_LOG_FILE=/tmp/zns.log
-$ zns example.com
-```
+![zns example.com that writes to a log file](./assets/basic-log-file.png)
 
 ## Contributing
 
