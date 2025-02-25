@@ -5,6 +5,9 @@ on:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+"
 
+permissions:
+  contents: write
+
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
@@ -20,7 +23,10 @@ jobs:
       - name: Release
         uses: goreleaser/goreleaser-action@90a3faa9d0182683851fbfa97ca1a2cb983bfca3 # v6
         with:
-          version: v1.26.2
+          # You can pass flags to goreleaser via GORELEASER_ARGS
+          # --clean will save you deleting the dist dir
           args: release --clean
+          distribution: goreleaser # or 'goreleaser-pro'
+          version: "~> v2" # or 'latest', 'nightly', semver
         env:
-          GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
