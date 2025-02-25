@@ -138,12 +138,10 @@ func NewRootCommand() *cobra.Command {
 				}
 			}
 
-			// If the server address does not already include a port,
-			// append the default DNS port (53) to it.
-			if !strings.Contains(server, ":") {
+			// If the server address doesn't already end with :53, append the default DNS port.
+			if !strings.HasSuffix(server, ":53") {
 				server = fmt.Sprintf("%s:53", server)
 			}
-
 			querier := query.NewQueryClient(server, new(dns.Client), logger)
 
 			logger.Debug("Creating querier", "server", server, "qtype", qtype, "domain", args[0])
