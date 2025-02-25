@@ -13,9 +13,17 @@ zns is a command-line utility for querying DNS records, displaying them in a hum
 
 ## Installing
 
+### MacOS
+
 ```sh
 brew install zns
 ```
+### Arch Linux
+
+```sh
+yay -S zns-bin
+```
+You can use any other package manager with AUR support or build the package yourself from https://aur.archlinux.org/packages/zns-bin.
 
 ## Usage
 
