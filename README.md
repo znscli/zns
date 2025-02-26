@@ -17,6 +17,11 @@ zns is a command-line utility for querying DNS records, displaying them in a hum
 brew install zns
 ```
 
+```
+# Via MacPorts
+sudo port install zns
+```
+
 ## Usage
 
 ```sh
