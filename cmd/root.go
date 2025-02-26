@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"runtime"
 	"sort"
@@ -28,6 +29,20 @@ var (
 	server  string
 	qtype   string
 )
+
+// EnsureDNSAddress formats the DNS server address properly.
+func EnsureDNSAddress(server string) string {
+	if strings.Contains(server, "]") || strings.Contains(server, ":") && net.ParseIP(server) == nil {
+		return server
+	}
+
+	ip := net.ParseIP(server)
+	if ip != nil && ip.To4() == nil { // It's IPv6 (and not IPv4)
+		return "[" + server + "]:53"
+	}
+	// Otherwise, assume IPv4 or hostname, so append port normally.
+	return server + ":53"
+}
 
 func NewRootCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -138,11 +153,7 @@ func NewRootCommand() *cobra.Command {
 				}
 			}
 
-			// If the server address does not already include a port,
-			// append the default DNS port (53) to it.
-			if !strings.Contains(server, ":") {
-				server = fmt.Sprintf("%s:53", server)
-			}
+			server = EnsureDNSAddress(server)
 
 			querier := query.NewQueryClient(server, new(dns.Client), logger)
 
