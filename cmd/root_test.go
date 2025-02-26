@@ -189,20 +189,20 @@ func Test_Cmd_LogFile_Debug(t *testing.T) {
 }
 
 func TestEnsureDNSAddress(t *testing.T) {
-    testCases := []struct {
-        input    string
-        expected string
-    }{
-        {"127.0.0.1", "127.0.0.1:53"},
-        {"2001:558:feed::1", "[2001:558:feed::1]:53"},
-        {"[2001:558:feed::1]:53", "[2001:558:feed::1]:53"},
-        {"example.com", "example.com:53"},
-    }
+	testCases := []struct {
+		input    string
+		expected string
+	}{
+		{"127.0.0.1", "127.0.0.1:53"},
+		{"2001:558:feed::1", "[2001:558:feed::1]:53"},
+		{"[2001:558:feed::1]:53", "[2001:558:feed::1]:53"},
+		{"example.com", "example.com:53"},
+	}
 
-    for _, tc := range testCases {
-        t.Run(fmt.Sprintf("input=%s", tc.input), func(t *testing.T) {
-            result := EnsureDNSAddress(tc.input)
-            assert.Equal(t, tc.expected, result)
-        })
-    }
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("input=%s", tc.input), func(t *testing.T) {
+			result := EnsureDNSAddress(tc.input)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
 }

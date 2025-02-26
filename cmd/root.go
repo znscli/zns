@@ -32,16 +32,16 @@ var (
 
 // EnsureDNSAddress formats the DNS server address properly.
 func EnsureDNSAddress(server string) string {
-    if strings.Contains(server, "]") || strings.Contains(server, ":") && net.ParseIP(server) == nil {
-        return server
-    }
+	if strings.Contains(server, "]") || strings.Contains(server, ":") && net.ParseIP(server) == nil {
+		return server
+	}
 
-    ip := net.ParseIP(server)
-    if ip != nil && ip.To4() == nil { // It's IPv6 (and not IPv4)
-        return "[" + server + "]:53"
-    }
-    // Otherwise, assume IPv4 or hostname, so append port normally.
-    return server + ":53"
+	ip := net.ParseIP(server)
+	if ip != nil && ip.To4() == nil { // It's IPv6 (and not IPv4)
+		return "[" + server + "]:53"
+	}
+	// Otherwise, assume IPv4 or hostname, so append port normally.
+	return server + ":53"
 }
 
 func NewRootCommand() *cobra.Command {
