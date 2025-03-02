@@ -18,11 +18,6 @@ zns is a command-line utility for querying DNS records, displaying them in a hum
 brew install zns
 ```
 
-### Arch Linux
-```sh
-yay -S zns-bin
-```
-
 ### MacPorts
 ```
 port install zns
@@ -31,6 +26,11 @@ port install zns
 ### FreeBSD
 ```
 pkg install zns
+```
+
+### Arch Linux
+```sh
+yay -S zns-bin
 ```
 
 ## Usage
