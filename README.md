@@ -20,7 +20,12 @@ brew install zns
 
 ### MacPorts
 ```
-sudo port install zns
+port install zns
+```
+
+### FreeBSD
+```
+pkg install zns
 ```
 
 ## Usage
