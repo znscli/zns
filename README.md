@@ -13,7 +13,6 @@ zns is a command-line utility for querying DNS records, displaying them in a hum
 
 ## Installing
 
-
 ### Homebrew
 ```sh
 brew install zns
