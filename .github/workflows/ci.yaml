@@ -25,7 +25,7 @@ jobs:
         run: go test ./...
 
       - name: Run linters
-        uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84 # v6
+        uses: golangci/golangci-lint-action@1481404843c368bc19ca9406f87d6e0fc97bdcfd # v6
         with:
           version: latest
 
