@@ -1,42 +1,55 @@
-# Visit https://golangci-lint.run/ for usage documentation and information on other useful linters
-issues:
-  max-same-issues: 0
-
-  exclude-rules:
-    # disable funlen for test funcs
-    - source: "^func Test"
-      linters:
-        - funlen
-
-    - source: "^func NewRootCommand"
-      linters:
-        - funlen
-
+version: "2"
 linters:
-  disable-all: true
+  default: none
   enable:
     - bidichk
-    - durationcheck
+    - copyloopvar
     - decorder
     - dogsled
+    - durationcheck
     - errcheck
-    - copyloopvar
     - forcetypeassert
     - funlen
+    - goconst
     - godot
     - godox
-    - gofmt
-    - gosimple
-    - goconst
+    - govet
     - ineffassign
     - makezero
     - misspell
     - nilerr
     - predeclared
     - staticcheck
-    - usetesting
     - unconvert
     - unparam
     - unused
-    - govet
-
+    - usetesting
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - funlen
+        source: ^func Test
+      - linters:
+          - funlen
+        source: ^func NewRootCommand
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+issues:
+  max-same-issues: 0
+formatters:
+  enable:
+    - gofmt
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
