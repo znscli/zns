@@ -183,9 +183,9 @@ func NewRootCommand() *cobra.Command {
 				}
 			}
 
-			// Sort the messages by query type, so the output is consistent.
+			// Sort the messages by query type alphabetically, so the output is consistent.
 			sort.SliceStable(messages, func(i, j int) bool {
-				return messages[i].Question[0].Qtype < messages[j].Question[0].Qtype
+				return dns.TypeToString[messages[i].Question[0].Qtype] < dns.TypeToString[messages[j].Question[0].Qtype]
 			})
 
 			for _, m := range messages {
