@@ -1,3 +1,5 @@
+version: 2
+
 project_name: "zns"
 
 # before are hooks that will be run before any builds are done, so good to put install scripts and stuff that your builds need here
@@ -12,6 +14,8 @@ builds:
     binary: zns
     goos: ["linux", "darwin", "windows"]
     goarch: ["386", "amd64", "arm64"]
+    flags:
+      - -trimpath
     ldflags:
       - -s -w -X "github.com/znscli/zns/cmd.version={{.Version}}"
     env:
@@ -21,21 +25,3 @@ changelog:
   sort: "asc"
   filters:
     exclude: ["^docs:", "demo", "^hugo:", "Merge pull request", "Merge branch"]
-
-brews:
-  - tap:
-      owner: znscli
-      name: homebrew-tap
-    name: zns
-    homepage: "https://github.com/znscli/zns"
-    description: "A CLI tool for querying DNS records with readable, colored output."
-    license: "MIT"
-    skip_upload: auto
-    commit_author:
-      name: zns
-      email: releases@zns.sh
-    folder: Formula
-    install: |-
-      bin.install "zns"
-    test: |
-      system "#{bin}/zns -v"

@@ -13,8 +13,19 @@ zns is a command-line utility for querying DNS records, displaying them in a hum
 
 ## Installing
 
+### Homebrew
 ```sh
-brew install znscli/tap/zns
+brew install zns
+```
+
+### MacPorts
+```
+port install zns
+```
+
+### FreeBSD
+```
+pkg install zns
 ```
 
 ## Usage
