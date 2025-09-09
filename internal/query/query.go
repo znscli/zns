@@ -73,15 +73,15 @@ func (q *QueryClient) query(domain string, qtype uint16) (*dns.Msg, error) {
 	msg := new(dns.Msg)
 	msg.SetQuestion(dns.Fqdn(domain), qtype)
 
-	q.Logger.Debug("Querying DNS server", "server", q.Server, "domain", domain, "qtype", dns.TypeToString[qtype])
+	q.Debug("Querying DNS server", "server", q.Server, "domain", domain, "qtype", dns.TypeToString[qtype])
 
 	resp, rtt, err := q.Client.Exchange(msg, q.Server)
 	if err != nil {
 		return nil, err
 	}
 
-	q.Logger.Debug("Received DNS response", "server", q.Server, "domain", domain, "qtype", dns.TypeToString[qtype], "rcode", dns.RcodeToString[resp.Rcode])
-	q.Logger.Debug("Round trip time", "rtt", rtt)
+	q.Debug("Received DNS response", "server", q.Server, "domain", domain, "qtype", dns.TypeToString[qtype], "rcode", dns.RcodeToString[resp.Rcode])
+	q.Debug("Round trip time", "rtt", rtt)
 
 	return resp, nil
 }
