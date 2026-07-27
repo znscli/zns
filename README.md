@@ -5,6 +5,7 @@ zns is a command-line utility for querying DNS records, displaying them in a hum
 ## Features
 
 * Supports all DNS record types
+* DNSSEC support, including chain-of-trust validation
 * Colorized and tabular output for easy reading
 * Concurrent queries for improved performance
 * JSON output format for machine-readable results
@@ -65,6 +66,25 @@ Types can be passed as bare arguments, comma-separated, or by repeating the flag
 $ zns google.com CAA HTTPS
 CAA     google.com.   05m07s   0 issue pki.goog
 HTTPS   google.com.   50m02s   1 . alpn="h2,h3"
+```
+
+### DNSSEC
+
+`--dnssec` requests DNSSEC records (sets the DO bit), returning RRSIGs alongside the answers. `--dnssec-validate` additionally validates every record against the DNSSEC chain of trust — RRSIG, DNSKEY, and DS records up to the IANA root trust anchors — and reports a per-record status: `secure`, `insecure`, or `bogus`.
+
+```sh
+$ zns cloudflare.com -q SOA --dnssec
+SOA     cloudflare.com.   05m00s   ns3.cloudflare.com. dns.cloudflare.com.
+RRSIG   cloudflare.com.   05m00s   SOA 13 2 300 20260728211808 20260726191808 34505 cloudflare.com. 1ABI4BPCBR708IgBpWk7fJPBnepWhT6FopVkalqnOyzwpMQx87xgQi8GG0gmYTYWqblvbdJz+7+PNftU79R65w==
+```
+
+```sh
+$ zns cloudflare.com -q A --dnssec-validate
+A       cloudflare.com.   01m57s   secure   104.16.133.229
+A       cloudflare.com.   01m57s   secure   104.16.132.229
+
+$ zns google.com -q A --dnssec-validate
+A   google.com.   01m20s   insecure   142.251.39.142
 ```
 
 ### Use a specific DNS server

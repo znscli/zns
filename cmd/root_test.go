@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -55,6 +56,10 @@ func dnsHandler(w dns.ResponseWriter, r *dns.Msg) {
 				A: net.ParseIP("93.184.216.34"),
 			}
 			msg.Answer = append(msg.Answer, a)
+		}
+		// Simulate a resolver failure, e.g. a DNSSEC validation error.
+		if q.Name == "servfail.test." {
+			msg.Rcode = dns.RcodeServerFailure
 		}
 		// Simulate a CNAME record response for "example.com"
 		if q.Name == "example.com." && q.Qtype == dns.TypeCNAME {
@@ -200,6 +205,36 @@ func Test_Cmd_MultipleQueryTypes_deduplicated(t *testing.T) {
 	// A single rendered line: the duplicate A query is dropped.
 	want := "A   example.com.   01m00s   93.184.216.34\n"
 	assert.Equal(t, want, out)
+}
+
+// Test_Cmd_DNSSECValidate renders each record with a validation status
+// column; the local test zone is unsigned, so the status is "insecure".
+func Test_Cmd_DNSSECValidate(t *testing.T) {
+	out := runToLogFile(t, "example.com", "-q", "A", "--dnssec-validate")
+
+	want := "A   example.com.   01m00s   insecure   93.184.216.34\n"
+	assert.Equal(t, want, out)
+}
+
+// Test_Cmd_ServfailWarning guards that a SERVFAIL response is surfaced on
+// stderr instead of silently rendering nothing.
+func Test_Cmd_ServfailWarning(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	oldStderr := os.Stderr
+	r, w, err := os.Pipe()
+	assert.NoError(t, err)
+	os.Stderr = w
+	defer func() { os.Stderr = oldStderr }()
+
+	rootCmd := NewRootCommand()
+	rootCmd.SetArgs([]string{"servfail.test", "-q", "A", "--server", fmt.Sprintf("127.0.0.1:%d", DNSServerPort)})
+	assert.NoError(t, rootCmd.Execute())
+
+	assert.NoError(t, w.Close())
+	out, err := io.ReadAll(r)
+	assert.NoError(t, err)
+	assert.Contains(t, string(out), "warning: A query for servfail.test returned SERVFAIL")
 }
 
 func Test_Cmd_MultipleDomains_error(t *testing.T) {

@@ -87,6 +87,9 @@ type QueryClient struct {
 	// Fallback, if set, retries queries whose response came back truncated —
 	// typically a TCP client, where the full answer fits.
 	Fallback DNSClient
+	// DNSSEC requests DNSSEC records (RRSIGs) by setting the DNSSEC OK (DO)
+	// bit on queries.
+	DNSSEC bool
 	hclog.Logger
 }
 
@@ -125,13 +128,18 @@ func (q *QueryClient) MultiQuery(domain string, qtypes []uint16) ([]*dns.Msg, er
 	return messages, errors.ErrorOrNil()
 }
 
+// Query performs a single DNS query and returns the response.
+func (q *QueryClient) Query(domain string, qtype uint16) (*dns.Msg, error) {
+	return q.query(domain, qtype)
+}
+
 // query performs the DNS query and returns the response and any error encountered.
 func (q *QueryClient) query(domain string, qtype uint16) (*dns.Msg, error) {
 	msg := new(dns.Msg)
 	msg.SetQuestion(dns.Fqdn(domain), qtype)
 	// Advertise a large EDNS0 UDP buffer so records that exceed 512 bytes
 	// (e.g. DNSKEY or large TXT sets) are not truncated.
-	msg.SetEdns0(4096, false)
+	msg.SetEdns0(4096, q.DNSSEC)
 
 	q.Debug("Querying DNS server", "server", q.Server, "domain", domain, "qtype", dns.TypeToString[qtype])
 

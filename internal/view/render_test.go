@@ -10,6 +10,7 @@ import (
 
 	"github.com/miekg/dns"
 	"github.com/stretchr/testify/assert"
+	"github.com/znscli/zns/internal/dnssec"
 	znsversion "github.com/znscli/zns/version"
 )
 
@@ -117,6 +118,27 @@ func TestJSONRenderer_Render_numericFields(t *testing.T) {
 	m := decodeJSONLine(t, b.String())
 	assert.Equal(t, float64(10), m["preference"])
 	assert.Equal(t, "mail.example.com.", m["record"])
+}
+
+func TestHumanRenderer_RenderDNSSEC(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	b := bytes.Buffer{}
+	NewHumanRenderer(&b).RenderDNSSEC("example.com", testARecord(), dnssec.StatusSecure)
+
+	// The status column sits before the value: earlier columns carry a
+	// constant number of color sequences per row, so the tabwriter aligns
+	// them even in colored output.
+	assert.Equal(t, "A\texample.com.\t03m42s\tsecure\t127.0.0.1\n", b.String())
+}
+
+func TestJSONRenderer_RenderDNSSEC(t *testing.T) {
+	b := bytes.Buffer{}
+	NewJSONRenderer(&b).RenderDNSSEC("example.com", testARecord(), dnssec.StatusBogus)
+
+	m := decodeJSONLine(t, b.String())
+	assert.Equal(t, "bogus", m["dnssec"])
+	assert.Equal(t, "127.0.0.1", m["record"])
 }
 
 func TestJSONRenderer_Render_oneLinePerRecord(t *testing.T) {

@@ -236,8 +236,11 @@ func formatRecordAsJSON(domain string, answer dns.RR) map[string]any {
 }
 
 // formatRecord generates a human-readable string representing a DNS record
-// with colors: all fields but the last in red, the last in white.
-func formatRecord(domainName string, answer dns.RR) string {
+// with colors: all fields but the last in red, the last in white. Optional
+// extra columns are inserted before the value column: the value cell carries
+// a varying number of color sequences per record type, which misleads the
+// tabwriter's width bookkeeping, so it must stay the trailing column.
+func formatRecord(domainName string, answer dns.RR, extraColumns ...string) string {
 	fields := recordFields(answer)
 	values := make([]string, len(fields))
 	for i, f := range fields {
@@ -248,10 +251,13 @@ func formatRecord(domainName string, answer dns.RR) string {
 			values[i] = color.HiRedString(s)
 		}
 	}
-	return fmt.Sprintf("%s\t%s.\t%s\t%s",
+
+	columns := []string{
 		color.HiYellowString(dns.Type(answer.Header().Rrtype).String()),
-		color.HiBlueString(domainName),
+		color.HiBlueString(strings.TrimSuffix(domainName, ".")) + ".",
 		color.HiMagentaString(formatTTL(answer.Header().Ttl)),
-		strings.Join(values, " "),
-	)
+	}
+	columns = append(columns, extraColumns...)
+	columns = append(columns, strings.Join(values, " "))
+	return strings.Join(columns, "\t")
 }

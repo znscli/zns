@@ -5,28 +5,26 @@ import (
 	"io"
 	"net"
 	"os"
-	"runtime"
 	"strings"
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
 	"github.com/spf13/cobra"
+	"github.com/znscli/zns/internal/dnssec"
 	"github.com/znscli/zns/internal/query"
 	"github.com/znscli/zns/internal/view"
 )
 
-const (
-	resolveConfPath = "/etc/resolv.conf"
-)
-
 var (
-	version    = "dev"
-	debug      bool
-	jsonOutput bool
-	noColor    bool
-	server     string
-	queryTypes []string
+	version        = "dev"
+	debug          bool
+	jsonOutput     bool
+	noColor        bool
+	server         string
+	queryTypes     []string
+	dnssecRecords  bool
+	dnssecValidate bool
 )
 
 // parseQueryArgs splits the positional arguments into the domain name and the
@@ -74,6 +72,48 @@ func parseQueryArgs(flagTypes, args []string) (string, []uint16, error) {
 	return domain, qtypes, nil
 }
 
+// renderValidated groups an answer section into RRsets, validates each
+// against the DNSSEC chain of trust, and renders every record with the
+// status of its RRset. RRSIG records take the status of the RRset they
+// cover.
+func renderValidated(renderer view.Renderer, validator *dnssec.Validator, domain string, answers []dns.RR) {
+	type setKey struct {
+		name  string
+		qtype uint16
+	}
+	key := func(rr dns.RR) setKey {
+		if sig, ok := rr.(*dns.RRSIG); ok {
+			return setKey{strings.ToLower(sig.Hdr.Name), sig.TypeCovered}
+		}
+		return setKey{strings.ToLower(rr.Header().Name), rr.Header().Rrtype}
+	}
+
+	rrsets := make(map[setKey][]dns.RR)
+	sigs := make(map[setKey][]*dns.RRSIG)
+	for _, rr := range answers {
+		k := key(rr)
+		if sig, ok := rr.(*dns.RRSIG); ok {
+			sigs[k] = append(sigs[k], sig)
+			continue
+		}
+		rrsets[k] = append(rrsets[k], rr)
+	}
+
+	statuses := make(map[setKey]dnssec.Status, len(rrsets))
+	for k, rrset := range rrsets {
+		status, _ := validator.Validate(rrset, sigs[k])
+		statuses[k] = status
+	}
+
+	for _, rr := range answers {
+		if status, ok := statuses[key(rr)]; ok {
+			renderer.RenderDNSSEC(domain, rr, status)
+		} else {
+			renderer.Render(domain, rr)
+		}
+	}
+}
+
 // EnsureDNSAddress appends the default DNS port (53) to a server address that
 // lacks one, bracketing IPv6 addresses as needed.
 func EnsureDNSAddress(server string) string {
@@ -84,51 +124,31 @@ func EnsureDNSAddress(server string) string {
 	return net.JoinHostPort(host, "53")
 }
 
-// systemNameserver returns the first DNS nameserver configured on the host.
-// Supported only on Unix-like systems. On Windows, dynamic DNS resolution is
-// not supported; a DNS nameserver must be explicitly specified using the
-// --server flag.
-func systemNameserver() (string, error) {
-	if runtime.GOOS == "windows" {
-		return "", fmt.Errorf("error: host DNS nameserver resolution is not supported on Windows; please specify a DNS server using the --server flag")
-	}
-
-	conf, err := dns.ClientConfigFromFile(resolveConfPath)
-	if err != nil {
-		return "", fmt.Errorf("error: failed to read %s: %v", resolveConfPath, err)
-	}
-	if len(conf.Servers) == 0 {
-		return "", fmt.Errorf("error: no DNS nameservers found in %s", resolveConfPath)
-	}
-	return conf.Servers[0], nil
-}
-
 func NewRootCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "zns",
-		Short: "zns is a command-line utility for querying DNS records and displaying them in human- or machine-readable formats.",
-		Long:  "zns is a command-line utility for querying DNS records, displaying them in a human-readable, colored format that includes type, name, TTL, and value. It supports all common DNS record types, concurrent queries for improved performance, JSON output format for machine-readable results, and options to write output to a file or query a specific DNS server.",
-		Example: `
-  # Query DNS records for example.com
+		Use:   "zns <domain> [record types...]",
+		Short: "A fast and friendly DNS lookup tool",
+		Long: `zns queries DNS records and presents them in a clean, colored table or as JSON.
+
+By default all common record types are queried concurrently. Specific types
+can be requested as arguments or with --query-type, and DNSSEC records can be
+included and validated against the chain of trust.`,
+		Example: `  # Look up example.com
   zns example.com
 
-  # Query a specific record type
+  # Specific record types
   zns example.com -q NS
+  zns example.com A AAAA MX
 
-  # Query multiple record types
-  zns example.com A CAA
-  zns example.com -q A,CAA
+  # DNSSEC: include RRSIGs, or validate the chain of trust
+  zns example.com --dnssec
+  zns example.com --dnssec-validate
 
-  # Use a specific DNS server
-  zns example.com -q NS --server 1.1.1.1
+  # Query a specific DNS server
+  zns example.com --server 1.1.1.1
 
-  # JSON output
-  zns example.com --json | jq
-
-  # Writing to a file
-  export ZNS_LOG_FILE=/tmp/zns.log
-  zns example.com
-`,
+  # Machine-readable output
+  zns example.com --json | jq`,
 		Version:       version,
 		SilenceErrors: true, // We handle errors ourselves.
 		SilenceUsage:  true, // Prevents the automatic rendering of the usage message when an error occurs.
@@ -190,19 +210,34 @@ func NewRootCommand() *cobra.Command {
 					return err
 				}
 				server = resolved
-				logger.Debug("Resolved DNS nameserver from host", "server", server, "path", resolveConfPath)
+				logger.Debug("Resolved DNS nameserver from host", "server", server)
 			}
 			server = EnsureDNSAddress(server)
 
 			querier := query.NewQueryClient(server, new(dns.Client), logger)
 			// Retry truncated UDP responses over TCP, where the full answer fits.
 			querier.Fallback = &dns.Client{Net: "tcp"}
+			querier.DNSSEC = dnssecRecords || dnssecValidate
 			messages, err := querier.MultiQuery(domain, qtypes)
 			if err != nil {
 				return err
 			}
 
+			var validator *dnssec.Validator
+			if dnssecValidate {
+				validator = dnssec.NewValidator(querier, dnssec.RootAnchors())
+			}
 			for _, m := range messages {
+				// Surface failures such as resolver-side DNSSEC validation
+				// errors instead of silently rendering nothing.
+				if m.Rcode != dns.RcodeSuccess && m.Rcode != dns.RcodeNameError {
+					fmt.Fprintf(os.Stderr, "warning: %s query for %s returned %s\n",
+						dns.Type(m.Question[0].Qtype).String(), domain, dns.RcodeToString[m.Rcode])
+				}
+				if validator != nil {
+					renderValidated(renderer, validator, domain, m.Answer)
+					continue
+				}
 				for _, record := range m.Answer {
 					renderer.Render(domain, record)
 				}
@@ -216,9 +251,11 @@ func NewRootCommand() *cobra.Command {
 
 	cmd.CompletionOptions.DisableDefaultCmd = true
 	cmd.Flags().StringVarP(&server, "server", "s", "", "DNS server to query")
-	cmd.Flags().StringSliceVarP(&queryTypes, "query-type", "q", nil, "DNS query types, comma-separated or repeated (e.g. -q A,AAAA or -q CAA -q MX); bare record types may also be given as arguments")
+	cmd.Flags().StringSliceVarP(&queryTypes, "query-type", "q", nil, "record types to query, comma-separated or repeated (e.g. -q A,AAAA)")
 	cmd.Flags().BoolVar(&debug, "debug", false, "Enable debug output")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+	cmd.Flags().BoolVar(&dnssecRecords, "dnssec", false, "Request DNSSEC records (sets the DO bit, returning RRSIGs)")
+	cmd.Flags().BoolVar(&dnssecValidate, "dnssec-validate", false, "Validate records against the DNSSEC chain of trust (implies --dnssec)")
 
 	return cmd
 }

@@ -691,6 +691,19 @@ func recordCases() []struct {
 	}
 }
 
+// TestFormatRecord_trailingDotDomain guards against rendering a double dot
+// when the queried domain already ends with one (e.g. "zns com.").
+func TestFormatRecord_trailingDotDomain(t *testing.T) {
+	t.Setenv("NO_COLOR", "true")
+
+	record := &dns.A{
+		Hdr: dns.RR_Header{Name: "example.com.", Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 222},
+		A:   net.IPv4(127, 0, 0, 1),
+	}
+
+	assert.Equal(t, "A\texample.com.\t03m42s\t127.0.0.1", formatRecord("example.com.", record))
+}
+
 func TestFormatRecord(t *testing.T) {
 	t.Setenv("NO_COLOR", "true") // Disable colors for easier testing
 

@@ -29,6 +29,9 @@ type MockDNSClient struct {
 
 	// ReceivedUDPSize stores the EDNS0 UDP buffer size advertised in the request.
 	ReceivedUDPSize uint16
+
+	// ReceivedDO stores whether the request set the DNSSEC OK (DO) bit.
+	ReceivedDO bool
 }
 
 func (m *MockDNSClient) Exchange(req *dns.Msg, addr string) (*dns.Msg, time.Duration, error) {
@@ -39,6 +42,7 @@ func (m *MockDNSClient) Exchange(req *dns.Msg, addr string) (*dns.Msg, time.Dura
 		m.QueryType = req.Question[0].Qtype
 		if opt := req.IsEdns0(); opt != nil {
 			m.ReceivedUDPSize = opt.UDPSize()
+			m.ReceivedDO = opt.Do()
 		}
 		m.mu.Unlock()
 	}
@@ -162,6 +166,42 @@ func TestQueryClient_Query_setsEDNS0(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Equal(t, uint16(4096), mockDNSClient.ReceivedUDPSize)
+}
+
+func TestQueryClient_Query_noDOBitByDefault(t *testing.T) {
+	mockDNSClient := &MockDNSClient{}
+	client := NewQueryClient("8.8.8.8", mockDNSClient, hclog.NewNullLogger())
+
+	_, err := client.query("example.com", dns.TypeA)
+
+	assert.NoError(t, err)
+	assert.False(t, mockDNSClient.ReceivedDO)
+}
+
+// TestQueryClient_Query_DNSSEC_setsDOBit guards that DNSSEC mode requests
+// signature records by setting the DNSSEC OK (DO) bit.
+func TestQueryClient_Query_DNSSEC_setsDOBit(t *testing.T) {
+	mockDNSClient := &MockDNSClient{}
+	client := NewQueryClient("8.8.8.8", mockDNSClient, hclog.NewNullLogger())
+	client.DNSSEC = true
+
+	_, err := client.query("example.com", dns.TypeA)
+
+	assert.NoError(t, err)
+	assert.True(t, mockDNSClient.ReceivedDO)
+}
+
+// TestQueryClient_Query_exported guards the exported single-type query used
+// by the DNSSEC validator.
+func TestQueryClient_Query_exported(t *testing.T) {
+	mockDNSClient := &MockDNSClient{}
+	client := NewQueryClient("8.8.8.8", mockDNSClient, hclog.NewNullLogger())
+
+	resp, err := client.Query("example.com", dns.TypeDNSKEY)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.Equal(t, dns.TypeDNSKEY, mockDNSClient.QueryType)
 }
 
 // TestQueryClient_Query_truncatedRetriesOverFallback guards that a truncated
