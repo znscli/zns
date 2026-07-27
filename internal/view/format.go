@@ -45,75 +45,213 @@ func formatTTL(ttl uint32) string {
 	return fmt.Sprintf("%02ds", seconds)
 }
 
-// formatRecordAsJSON generates a map of DNS record fields for JSON rendering.
-func formatRecordAsJSON(domain string, answer dns.RR) map[string]interface{} {
-	m := make(map[string]interface{})
-	m["@domain"] = domain
-	m["@type"] = dns.TypeToString[answer.Header().Rrtype]
-	m["@ttl"] = formatTTL(answer.Header().Ttl)
+// field is a single RDATA element of a DNS record: its JSON key and its raw
+// value. Fields are ordered as they appear in the record's zone-file
+// presentation, so both the human and JSON formatters derive from the same
+// definition.
+type field struct {
+	key   string
+	value any
+}
 
-	// Add specific fields depending on the record type
-	switch rec := answer.(type) {
+// recordFields returns the RDATA fields of a DNS record in presentation
+// order. Record types without a dedicated case fall back to a single @record
+// field holding the record's zone-file RDATA presentation, so every record
+// type the DNS library can parse is supported.
+func recordFields(rr dns.RR) []field {
+	switch rec := rr.(type) {
 	case *dns.A:
-		m["@record"] = rec.A.String()
+		return []field{{"record", rec.A.String()}}
 	case *dns.AAAA:
-		m["@record"] = rec.AAAA.String()
+		return []field{{"record", rec.AAAA.String()}}
+	case *dns.AFSDB:
+		return []field{{"subtype", rec.Subtype}, {"record", rec.Hostname}}
+	case *dns.CAA:
+		return []field{{"flag", rec.Flag}, {"tag", rec.Tag}, {"record", escapeOctet(rec.Value)}}
+	case *dns.CDNSKEY:
+		return dnskeyFields(&rec.DNSKEY)
+	case *dns.CDS:
+		return dsFields(&rec.DS)
+	case *dns.CERT:
+		return []field{{"certType", certTypeString(rec.Type)}, {"keyTag", rec.KeyTag}, {"algorithm", algorithmString(rec.Algorithm)}, {"record", rec.Certificate}}
 	case *dns.CNAME:
-		m["@record"] = rec.Target
+		return []field{{"record", rec.Target}}
+	case *dns.DHCID:
+		return []field{{"record", rec.Digest}}
+	case *dns.DNAME:
+		return []field{{"record", rec.Target}}
+	case *dns.DNSKEY:
+		return dnskeyFields(rec)
+	case *dns.DS:
+		return dsFields(rec)
+	case *dns.HINFO:
+		return []field{{"cpu", rec.Cpu}, {"os", rec.Os}}
+	case *dns.HTTPS:
+		return svcbFields(&rec.SVCB)
+	case *dns.KX:
+		return []field{{"preference", rec.Preference}, {"record", rec.Exchanger}}
 	case *dns.MX:
-		m["@preference"] = rec.Preference
-		m["@record"] = rec.Mx
-	case *dns.TXT:
-		m["@record"] = strings.Join(rec.Txt, " ")
+		return []field{{"preference", rec.Preference}, {"record", rec.Mx}}
+	case *dns.NAPTR:
+		return []field{{"order", rec.Order}, {"preference", rec.Preference}, {"flags", rec.Flags}, {"service", rec.Service}, {"regexp", rec.Regexp}, {"record", rec.Replacement}}
 	case *dns.NS:
-		m["@record"] = rec.Ns
-	case *dns.SOA:
-		m["@primaryNameServer"] = rec.Ns
-		m["@mbox"] = rec.Mbox
+		return []field{{"record", rec.Ns}}
+	case *dns.NULL:
+		return []field{{"record", escapeOctet(rec.Data)}}
+	case *dns.NSEC:
+		return []field{{"record", rec.NextDomain}, {"types", typesString(rec.TypeBitMap)}}
+	case *dns.NSEC3:
+		return []field{{"hashAlgorithm", rec.Hash}, {"flags", rec.Flags}, {"iterations", rec.Iterations}, {"salt", saltString(rec.Salt)}, {"record", rec.NextDomain}, {"types", typesString(rec.TypeBitMap)}}
+	case *dns.NSEC3PARAM:
+		return []field{{"hashAlgorithm", rec.Hash}, {"flags", rec.Flags}, {"iterations", rec.Iterations}, {"salt", saltString(rec.Salt)}}
+	case *dns.OPENPGPKEY:
+		return []field{{"record", rec.PublicKey}}
 	case *dns.PTR:
-		m["@record"] = rec.Ptr
+		return []field{{"record", rec.Ptr}}
+	case *dns.RP:
+		return []field{{"mbox", rec.Mbox}, {"txt", rec.Txt}}
+	case *dns.RRSIG:
+		return []field{{"typeCovered", dns.Type(rec.TypeCovered).String()}, {"algorithm", rec.Algorithm}, {"labels", rec.Labels}, {"originalTtl", rec.OrigTtl}, {"expiration", dns.TimeToString(rec.Expiration)}, {"inception", dns.TimeToString(rec.Inception)}, {"keyTag", rec.KeyTag}, {"signerName", rec.SignerName}, {"record", rec.Signature}}
+	case *dns.SMIMEA:
+		return []field{{"usage", rec.Usage}, {"selector", rec.Selector}, {"matchingType", rec.MatchingType}, {"record", rec.Certificate}}
+	case *dns.SOA:
+		return []field{{"primaryNameServer", rec.Ns}, {"mbox", rec.Mbox}}
+	case *dns.SPF:
+		return []field{{"record", strings.Join(rec.Txt, " ")}}
+	case *dns.SRV:
+		return []field{{"priority", rec.Priority}, {"weight", rec.Weight}, {"port", rec.Port}, {"record", rec.Target}}
+	case *dns.SSHFP:
+		return []field{{"algorithm", rec.Algorithm}, {"fingerprintType", rec.Type}, {"record", strings.ToUpper(rec.FingerPrint)}}
+	case *dns.SVCB:
+		return svcbFields(rec)
+	case *dns.TLSA:
+		return []field{{"usage", rec.Usage}, {"selector", rec.Selector}, {"matchingType", rec.MatchingType}, {"record", rec.Certificate}}
+	case *dns.TXT:
+		return []field{{"record", strings.Join(rec.Txt, " ")}}
+	case *dns.URI:
+		return []field{{"priority", rec.Priority}, {"weight", rec.Weight}, {"record", escapeOctet(rec.Target)}}
+	case *dns.ZONEMD:
+		return []field{{"serial", rec.Serial}, {"scheme", rec.Scheme}, {"hashAlgorithm", rec.Hash}, {"record", rec.Digest}}
 	default:
-		m["@record"] = fmt.Sprintf("Unknown record type: %s", dns.TypeToString[answer.Header().Rrtype])
+		return []field{{"record", rdataString(rr)}}
 	}
+}
 
+func dnskeyFields(rec *dns.DNSKEY) []field {
+	return []field{{"flags", rec.Flags}, {"protocol", rec.Protocol}, {"algorithm", rec.Algorithm}, {"record", rec.PublicKey}}
+}
+
+// dsFields uppercases the digest to match the zone-file presentation; records
+// unpacked from the wire carry lowercase hex.
+func dsFields(rec *dns.DS) []field {
+	return []field{{"keyTag", rec.KeyTag}, {"algorithm", rec.Algorithm}, {"digestType", rec.DigestType}, {"record", strings.ToUpper(rec.Digest)}}
+}
+
+// certTypeString formats a CERT type as in its zone-file presentation, e.g.
+// "PKIX", falling back to the raw number when unmapped.
+func certTypeString(certType uint16) string {
+	if s, ok := dns.CertTypeToString[certType]; ok {
+		return s
+	}
+	return strconv.Itoa(int(certType))
+}
+
+// algorithmString formats a DNSSEC algorithm as in the CERT zone-file
+// presentation, e.g. "RSASHA256", falling back to the raw number when
+// unmapped.
+func algorithmString(algorithm uint8) string {
+	if s, ok := dns.AlgorithmToString[algorithm]; ok {
+		return s
+	}
+	return strconv.Itoa(int(algorithm))
+}
+
+// escapeOctet escapes raw octet-encoded RDATA (CAA values, URI targets, NULL
+// data) for safe single-line display, mirroring DNS presentation escaping:
+// backslashes and non-printable bytes become \DDD sequences.
+func escapeOctet(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c == '\\':
+			b.WriteString(`\\`)
+		case c < ' ' || c > '~':
+			fmt.Fprintf(&b, `\%03d`, c)
+		default:
+			b.WriteByte(c)
+		}
+	}
+	return b.String()
+}
+
+func svcbFields(rec *dns.SVCB) []field {
+	fields := []field{{"priority", rec.Priority}, {"record", rec.Target}}
+	if len(rec.Value) > 0 {
+		params := make([]string, len(rec.Value))
+		for i, kv := range rec.Value {
+			params[i] = kv.Key().String() + "=\"" + kv.String() + "\""
+		}
+		fields = append(fields, field{"params", strings.Join(params, " ")})
+	}
+	return fields
+}
+
+// typesString formats an NSEC/NSEC3 type bitmap as space-separated type names.
+func typesString(bitmap []uint16) string {
+	names := make([]string, len(bitmap))
+	for i, t := range bitmap {
+		names[i] = dns.Type(t).String()
+	}
+	return strings.Join(names, " ")
+}
+
+// saltString formats an NSEC3 salt as in its zone-file presentation, where an
+// empty salt is written as "-".
+func saltString(salt string) string {
+	if salt == "" {
+		return "-"
+	}
+	return strings.ToUpper(salt)
+}
+
+// rdataString returns the RDATA portion of a record's zone-file presentation,
+// i.e. everything after the name, TTL, class, and type columns.
+func rdataString(rr dns.RR) string {
+	parts := strings.SplitN(rr.String(), "\t", 5)
+	return parts[len(parts)-1]
+}
+
+// formatRecordAsJSON generates a map of DNS record fields for JSON rendering.
+func formatRecordAsJSON(domain string, answer dns.RR) map[string]any {
+	m := map[string]any{
+		"domain": domain,
+		"type":   dns.Type(answer.Header().Rrtype).String(),
+		"ttl":    formatTTL(answer.Header().Ttl),
+	}
+	for _, f := range recordFields(answer) {
+		m[f.key] = f.value
+	}
 	return m
 }
 
-// formatRecord generates a human-readable string representing a DNS record with colors.
+// formatRecord generates a human-readable string representing a DNS record
+// with colors: all fields but the last in red, the last in white.
 func formatRecord(domainName string, answer dns.RR) string {
-	recordType := color.HiYellowString(dns.TypeToString[answer.Header().Rrtype])
-	formattedTTL := color.HiMagentaString(formatTTL(answer.Header().Ttl))
-
-	switch rec := answer.(type) {
-	case *dns.A:
-		return fmt.Sprintf("%s\t%s.\t%s\t%s", recordType, color.HiBlueString(domainName), formattedTTL, color.HiWhiteString(rec.A.String()))
-	case *dns.AAAA:
-		return fmt.Sprintf("%s\t%s.\t%s\t%s", recordType, color.HiBlueString(domainName), formattedTTL, color.HiWhiteString(rec.AAAA.String()))
-	case *dns.CNAME:
-		return fmt.Sprintf("%s\t%s.\t%s\t%s", recordType, color.HiBlueString(domainName), formattedTTL, color.HiWhiteString(rec.Target))
-	case *dns.MX:
-		preference := color.HiRedString(strconv.FormatUint(uint64(rec.Preference), 10))
-		return fmt.Sprintf("%s\t%s.\t%s\t%s %s", recordType, color.HiBlueString(domainName), formattedTTL, preference, color.HiWhiteString(rec.Mx))
-	case *dns.TXT:
-		txtJoined := strings.Join(rec.Txt, " ")
-		return fmt.Sprintf("%s\t%s.\t%s\t%s", recordType, color.HiBlueString(domainName), formattedTTL, color.HiWhiteString(txtJoined))
-	case *dns.NS:
-		return fmt.Sprintf("%s\t%s.\t%s\t%s", recordType, color.HiBlueString(domainName), formattedTTL, color.HiWhiteString(rec.Ns))
-	case *dns.SOA:
-		primaryNameServer := color.HiRedString(rec.Ns)
-		return fmt.Sprintf("%s\t%s.\t%s\t%s %s", recordType, color.HiBlueString(domainName), formattedTTL, primaryNameServer, color.HiWhiteString(rec.Mbox))
-	case *dns.PTR:
-		return fmt.Sprintf("%s\t%s.\t%s\t%s", recordType, color.HiBlueString(domainName), formattedTTL, color.HiWhiteString(rec.Ptr))
-	default:
-		return fmt.Sprintf(`
-Unknown record type: %s
-
-We encountered an unsupported DNS record type: %s. 
-
-Please consider raising an issue on GitHub to add support for this record type.
-https://github.com/znscli/zns/issues/new
-
-Thank you for your contribution!
-`, recordType, recordType)
+	fields := recordFields(answer)
+	values := make([]string, len(fields))
+	for i, f := range fields {
+		s := fmt.Sprint(f.value)
+		if i == len(fields)-1 {
+			values[i] = color.HiWhiteString(s)
+		} else {
+			values[i] = color.HiRedString(s)
+		}
 	}
+	return fmt.Sprintf("%s\t%s.\t%s\t%s",
+		color.HiYellowString(dns.Type(answer.Header().Rrtype).String()),
+		color.HiBlueString(domainName),
+		color.HiMagentaString(formatTTL(answer.Header().Ttl)),
+		strings.Join(values, " "),
+	)
 }

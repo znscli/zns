@@ -1,74 +1,83 @@
 package view
 
 import (
+	"encoding/json"
+	"io"
+	"time"
+
 	"github.com/miekg/dns"
-	"github.com/znscli/zns/internal/arguments"
+	znsversion "github.com/znscli/zns/version"
 )
 
-// Renderer interface with a unified Render method.
+// timestampFormat is the RFC 3339 layout used for the timestamp field in JSON
+// output.
+const timestampFormat = "2006-01-02T15:04:05.000000Z07:00"
+
+// ViewType represents which view layer to use.
+type ViewType int
+
+const (
+	ViewHuman ViewType = iota
+	ViewJSON
+)
+
+// Renderer renders DNS records to an output stream.
 type Renderer interface {
 	Render(domain string, record dns.RR)
 }
 
-func NewRenderer(vt arguments.ViewType, view *View) Renderer {
+// NewRenderer returns a Renderer for the given view type, writing to w.
+func NewRenderer(vt ViewType, w io.Writer) Renderer {
 	switch vt {
-	case arguments.ViewHuman:
-		return &HumanRenderer{view}
-	case arguments.ViewJSON:
-		return &JSONRenderer{NewJSONView(view)}
+	case ViewHuman:
+		return NewHumanRenderer(w)
+	case ViewJSON:
+		return NewJSONRenderer(w)
 	default:
 		panic("unknown view type")
 	}
 }
 
-// HumanRenderer for writing human-readable output.
+// HumanRenderer writes DNS records as colored, tab-separated lines.
 type HumanRenderer struct {
-	view *View
+	w io.Writer
 }
 
-// Validate that HumanRenderer implements the Renderer interface.
 var _ Renderer = (*HumanRenderer)(nil)
 
-// NewHumanRenderer creates a HumanRenderer with a "human" view bound to an output stream.
-func NewHumanRenderer(view *View) *HumanRenderer {
-	return &HumanRenderer{
-		view: view,
-	}
+func NewHumanRenderer(w io.Writer) *HumanRenderer {
+	return &HumanRenderer{w: w}
 }
 
-// Render renders a DNS record in human-readable format to the output stream.
-func (v *HumanRenderer) Render(domain string, record dns.RR) {
-	humanReadable := formatRecord(domain, record)
-	_, err := v.view.Stream.Writer.Write([]byte(humanReadable + "\n"))
-	if err != nil {
+// Render writes a DNS record in human-readable format to the output stream.
+func (r *HumanRenderer) Render(domain string, record dns.RR) {
+	if _, err := io.WriteString(r.w, formatRecord(domain, record)+"\n"); err != nil {
 		panic(err)
 	}
 }
 
-// JSONRenderer for rendering JSON output.
+// JSONRenderer writes DNS records as JSON, one object per line.
 type JSONRenderer struct {
-	view *JSONView
+	enc *json.Encoder
 }
 
-// Validate that JSONRenderer implements the Renderer interface.
 var _ Renderer = (*JSONRenderer)(nil)
 
-// NewJSONRenderer creates a JSONRenderer with a JSONView bound to an output stream.
-func NewJSONRenderer(view *JSONView) *JSONRenderer {
-	return &JSONRenderer{
-		view: view,
-	}
+func NewJSONRenderer(w io.Writer) *JSONRenderer {
+	enc := json.NewEncoder(w)
+	enc.SetEscapeHTML(false)
+	return &JSONRenderer{enc: enc}
 }
 
-// Render renders a DNS record in JSON format to the output stream.
-func (v *JSONRenderer) Render(domain string, record dns.RR) {
-	jsonMap := formatRecordAsJSON(domain, record)
-
-	var params []any
-	for key, value := range jsonMap {
-		// Append each key-value pair as separate parameters.
-		params = append(params, key, value)
+// Render writes a DNS record as a single JSON object to the output stream.
+func (r *JSONRenderer) Render(domain string, record dns.RR) {
+	m := formatRecordAsJSON(domain, record)
+	m["level"] = "info"
+	m["message"] = "Successful query"
+	m["timestamp"] = time.Now().Format(timestampFormat)
+	m["version"] = znsversion.Version
+	m["view"] = "json"
+	if err := r.enc.Encode(m); err != nil {
+		panic(err)
 	}
-
-	v.view.Output("Successful query", params...)
 }

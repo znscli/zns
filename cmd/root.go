@@ -2,17 +2,16 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"runtime"
-	"sort"
 	"strings"
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
 	"github.com/spf13/cobra"
-	"github.com/znscli/zns/internal/arguments"
 	"github.com/znscli/zns/internal/query"
 	"github.com/znscli/zns/internal/view"
 )
@@ -22,39 +21,103 @@ const (
 )
 
 var (
-	version = "dev"
-	debug   bool
-	json    bool
-	noColor bool
-	server  string
-	qtype   string
+	version    = "dev"
+	debug      bool
+	jsonOutput bool
+	noColor    bool
+	server     string
+	queryTypes []string
 )
 
-// EnsureDNSAddress formats the DNS server address properly.
-func EnsureDNSAddress(server string) string {
-	if strings.Contains(server, "]") || strings.Contains(server, ":") && net.ParseIP(server) == nil {
-		return server
+// parseQueryArgs splits the positional arguments into the domain name and the
+// requested query types: any argument matching a record type name (e.g. "A",
+// "caa") counts as a type, the remaining argument is the domain. A domain
+// that collides with a type name can be given with a trailing dot ("mx.").
+// Flag-provided types come first, duplicates are dropped, and order is
+// preserved so results render in the requested order.
+func parseQueryArgs(flagTypes, args []string) (string, []uint16, error) {
+	var domain string
+	qtypes := make([]uint16, 0, len(flagTypes)+len(args))
+	seen := make(map[uint16]bool)
+
+	addType := func(qtype uint16) {
+		if !seen[qtype] {
+			seen[qtype] = true
+			qtypes = append(qtypes, qtype)
+		}
 	}
 
-	ip := net.ParseIP(server)
-	if ip != nil && ip.To4() == nil { // It's IPv6 (and not IPv4)
-		return "[" + server + "]:53"
+	for _, name := range flagTypes {
+		qtype, err := query.ParseQueryType(name)
+		if err != nil {
+			return "", nil, fmt.Errorf("error: %w", err)
+		}
+		addType(qtype)
 	}
-	// Otherwise, assume IPv4 or hostname, so append port normally.
-	return server + ":53"
+	for _, arg := range args {
+		if qtype, err := query.ParseQueryType(arg); err == nil {
+			addType(qtype)
+			continue
+		}
+		if domain != "" {
+			return "", nil, fmt.Errorf("error: multiple domain names provided: %s, %s", domain, arg)
+		}
+		domain = arg
+	}
+
+	if domain == "" {
+		return "", nil, fmt.Errorf("error: domain name is required")
+	}
+	if len(qtypes) == 0 {
+		qtypes = query.DefaultQueryTypes
+	}
+	return domain, qtypes, nil
+}
+
+// EnsureDNSAddress appends the default DNS port (53) to a server address that
+// lacks one, bracketing IPv6 addresses as needed.
+func EnsureDNSAddress(server string) string {
+	if _, _, err := net.SplitHostPort(server); err == nil {
+		return server // Already host:port or [host]:port.
+	}
+	host := strings.TrimSuffix(strings.TrimPrefix(server, "["), "]")
+	return net.JoinHostPort(host, "53")
+}
+
+// systemNameserver returns the first DNS nameserver configured on the host.
+// Supported only on Unix-like systems. On Windows, dynamic DNS resolution is
+// not supported; a DNS nameserver must be explicitly specified using the
+// --server flag.
+func systemNameserver() (string, error) {
+	if runtime.GOOS == "windows" {
+		return "", fmt.Errorf("error: host DNS nameserver resolution is not supported on Windows; please specify a DNS server using the --server flag")
+	}
+
+	conf, err := dns.ClientConfigFromFile(resolveConfPath)
+	if err != nil {
+		return "", fmt.Errorf("error: failed to read %s: %v", resolveConfPath, err)
+	}
+	if len(conf.Servers) == 0 {
+		return "", fmt.Errorf("error: no DNS nameservers found in %s", resolveConfPath)
+	}
+	return conf.Servers[0], nil
 }
 
 func NewRootCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "zns",
 		Short: "zns is a command-line utility for querying DNS records and displaying them in human- or machine-readable formats.",
-		Long:  "zns is a command-line utility for querying DNS records, displaying them in a human-readable, colored format that includes type, name, TTL, and value. It supports various DNS record types, concurrent queries for improved performance, JSON output format for machine-readable results, and options to write output to a file or query a specific DNS server.",
+		Long:  "zns is a command-line utility for querying DNS records, displaying them in a human-readable, colored format that includes type, name, TTL, and value. It supports all common DNS record types, concurrent queries for improved performance, JSON output format for machine-readable results, and options to write output to a file or query a specific DNS server.",
 		Example: `
   # Query DNS records for example.com
   zns example.com
 
   # Query a specific record type
   zns example.com -q NS
+
+  # Query multiple record types
+  zns example.com A CAA
+  zns example.com -q A,CAA
 
   # Use a specific DNS server
   zns example.com -q NS --server 1.1.1.1
@@ -70,8 +133,9 @@ func NewRootCommand() *cobra.Command {
 		SilenceErrors: true, // We handle errors ourselves.
 		SilenceUsage:  true, // Prevents the automatic rendering of the usage message when an error occurs.
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) != 1 {
-				return fmt.Errorf("error: domain name is required")
+			domain, qtypes, err := parseQueryArgs(queryTypes, args)
+			if err != nil {
+				return err
 			}
 
 			var color hclog.ColorOption
@@ -87,113 +151,64 @@ func NewRootCommand() *cobra.Command {
 				logLevel = "DEBUG"
 			}
 
-			var vt arguments.ViewType
-			if json {
-				vt = arguments.ViewJSON
-			} else {
-				vt = arguments.ViewHuman
-			}
-
-			var w = view.NewTabWriter(os.Stdout, debug)
-			logFile := os.Getenv("ZNS_LOG_FILE")
-			if logFile != "" {
+			out := io.Writer(os.Stdout)
+			if logFile := os.Getenv("ZNS_LOG_FILE"); logFile != "" {
 				f, err := os.Create(logFile)
 				if err != nil {
 					return fmt.Errorf("error: failed to create log file: %v", err)
 				}
 				defer f.Close()
-				w = view.NewTabWriter(f, debug)
+				out = f
 			}
+			w := view.NewTabWriter(out, debug)
 
-			v := view.NewRenderer(vt, &view.View{
-				Stream: &view.Stream{
-					Writer: w,
-				},
-			})
+			vt := view.ViewHuman
+			if jsonOutput {
+				vt = view.ViewJSON
+			}
+			renderer := view.NewRenderer(vt, w)
 
+			logOutput := io.Writer(w)
+			if jsonOutput {
+				// Keep the machine-readable stream free of diagnostics; hclog
+				// uses its own @-prefixed JSON envelope.
+				logOutput = os.Stderr
+			}
 			logger := hclog.New(&hclog.LoggerOptions{
 				Name:                 "zns",
-				Output:               w,
+				Output:               logOutput,
 				Level:                hclog.LevelFromString(logLevel),
 				Color:                color,
 				ColorHeaderAndFields: !noColor,
-				DisableTime:          false,
-				JSONFormat:           json,
-			}).With("@domain", args[0])
+				JSONFormat:           jsonOutput,
+			})
+			logger.Debug("Flags", "server", server, "qtypes", strings.Join(queryTypes, ","), "debug", debug)
 
-			logger.Debug("Debug logging enabled", "debug", debug)
-			logger.Debug("Log level", "level", logger.GetLevel())
-
-			logger.Debug("Args", "args", args)
-			logger.Debug("Flags", "server", server, "qtype", qtype, "debug", debug)
-
-			// Resolve the DNS nameserver from the host.
-			// Supported only on Unix-like systems.
-			// On Windows, dynamic DNS resolution is not supported;
-			// a DNS nameserver must be explicitly specified using the --server flag.
 			if server == "" {
-				switch runtime.GOOS {
-				case "windows":
-					return fmt.Errorf("error: host DNS nameserver resolution is not supported on Windows; please specify a DNS server using the --server flag")
-				default:
-					logger.Debug(fmt.Sprintf("Resolving DNS nameserver from \"%s\"", resolveConfPath), "path", resolveConfPath)
-
-					// Attempt to retrieve the DNS nameserver from `/etc/resolv.conf`.
-					conf, err := dns.ClientConfigFromFile(resolveConfPath)
-					if err != nil {
-						return fmt.Errorf("error: failed to read %s: %v", resolveConfPath, err)
-					}
-
-					if len(conf.Servers) == 0 {
-						return fmt.Errorf("error: no DNS nameservers found in %s", resolveConfPath)
-					}
-
-					server = conf.Servers[0] // Use the first available DNS nameserver.
-					logger.Debug(fmt.Sprintf("Using DNS nameserver %s", server), "server", server, "path", resolveConfPath)
+				resolved, err := systemNameserver()
+				if err != nil {
+					return err
 				}
+				server = resolved
+				logger.Debug("Resolved DNS nameserver from host", "server", server, "path", resolveConfPath)
 			}
-
 			server = EnsureDNSAddress(server)
 
 			querier := query.NewQueryClient(server, new(dns.Client), logger)
-
-			logger.Debug("Creating querier", "server", server, "qtype", qtype, "domain", args[0])
-
-			// Create a slice of supported query types to query.
-			qtypes := make([]uint16, 0, len(query.QueryTypes))
-			for _, qtype := range query.QueryTypes {
-				qtypes = append(qtypes, qtype)
-			}
-
-			// Filter down to the specified query type, if provided.
-			if qtype != "" {
-				qtypeInt, ok := query.QueryTypes[strings.ToUpper(qtype)]
-				if !ok {
-					return fmt.Errorf("error: invalid query type: %s", qtype)
-				}
-				qtypes = []uint16{qtypeInt}
-			}
-
-			messages, err := querier.MultiQuery(args[0], qtypes)
+			// Retry truncated UDP responses over TCP, where the full answer fits.
+			querier.Fallback = &dns.Client{Net: "tcp"}
+			messages, err := querier.MultiQuery(domain, qtypes)
 			if err != nil {
-				if merr, ok := err.(*multierror.Error); ok {
-					return merr
-				} else {
-					return err
-				}
+				return err
 			}
-
-			// Sort the messages by query type alphabetically, so the output is consistent.
-			sort.SliceStable(messages, func(i, j int) bool {
-				return dns.TypeToString[messages[i].Question[0].Qtype] < dns.TypeToString[messages[j].Question[0].Qtype]
-			})
 
 			for _, m := range messages {
 				for _, record := range m.Answer {
-					v.Render(args[0], record)
+					renderer.Render(domain, record)
 				}
 			}
-			w.Flush() // we need to flush the buffer to ensure all data is written to the underlying stream.
+			// Flush the tabwriter to ensure all data is written to the underlying stream.
+			_ = w.Flush()
 
 			return nil
 		},
@@ -201,9 +216,9 @@ func NewRootCommand() *cobra.Command {
 
 	cmd.CompletionOptions.DisableDefaultCmd = true
 	cmd.Flags().StringVarP(&server, "server", "s", "", "DNS server to query")
-	cmd.Flags().StringVarP(&qtype, "query-type", "q", "", "DNS query type")
+	cmd.Flags().StringSliceVarP(&queryTypes, "query-type", "q", nil, "DNS query types, comma-separated or repeated (e.g. -q A,AAAA or -q CAA -q MX); bare record types may also be given as arguments")
 	cmd.Flags().BoolVar(&debug, "debug", false, "Enable debug output")
-	cmd.Flags().BoolVar(&json, "json", false, "Output in JSON format")
+	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 
 	return cmd
 }

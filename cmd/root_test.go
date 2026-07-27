@@ -1,10 +1,13 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/miekg/dns"
@@ -98,12 +101,34 @@ func Test_Cmd_Error(t *testing.T) {
 func Test_Cmd_JSON(t *testing.T) {
 	t.Setenv("NO_COLOR", "1") // Disable color codes for easier testing
 
+	logFile := filepath.Join(t.TempDir(), "zns.json")
+	t.Setenv("ZNS_LOG_FILE", logFile)
+
 	rootCmd := NewRootCommand()
 	rootCmd.SetArgs([]string{"example.com", "--json", "--server", fmt.Sprintf("127.0.0.1:%d", DNSServerPort)})
 
 	err := rootCmd.Execute()
-
 	assert.NoError(t, err)
+
+	out, err := os.ReadFile(logFile)
+	assert.NoError(t, err)
+
+	lines := strings.Split(strings.TrimSuffix(string(out), "\n"), "\n")
+	assert.Len(t, lines, 2) // One JSON object per answered record: A and CNAME.
+
+	var a map[string]any
+	assert.NoError(t, json.Unmarshal([]byte(lines[0]), &a))
+	assert.Equal(t, "example.com", a["domain"])
+	assert.Equal(t, "A", a["type"])
+	assert.Equal(t, "93.184.216.34", a["record"])
+	assert.Equal(t, "01m00s", a["ttl"])
+	assert.Equal(t, "info", a["level"])
+	assert.Equal(t, "json", a["view"])
+
+	var cname map[string]any
+	assert.NoError(t, json.Unmarshal([]byte(lines[1]), &cname))
+	assert.Equal(t, "CNAME", cname["type"])
+	assert.Equal(t, "example.org.", cname["record"])
 }
 
 func Test_Cmd_QueryType(t *testing.T) {
@@ -115,6 +140,90 @@ func Test_Cmd_QueryType(t *testing.T) {
 	err := rootCmd.Execute()
 
 	assert.NoError(t, err)
+}
+
+// runToLogFile executes zns with the given args, capturing rendered output in
+// a temp file, and returns the file content.
+func runToLogFile(t *testing.T, args ...string) string {
+	t.Helper()
+	t.Setenv("NO_COLOR", "1")
+
+	logFile := filepath.Join(t.TempDir(), "zns.log")
+	t.Setenv("ZNS_LOG_FILE", logFile)
+
+	rootCmd := NewRootCommand()
+	rootCmd.SetArgs(append(args, "--server", fmt.Sprintf("127.0.0.1:%d", DNSServerPort)))
+	assert.NoError(t, rootCmd.Execute())
+
+	out, err := os.ReadFile(logFile)
+	assert.NoError(t, err)
+	return string(out)
+}
+
+func Test_Cmd_MultipleQueryTypes_positional(t *testing.T) {
+	out := runToLogFile(t, "example.com", "A", "CNAME")
+
+	want := "A       example.com.   01m00s   93.184.216.34\n" +
+		"CNAME   example.com.   01m00s   example.org.\n"
+	assert.Equal(t, want, out)
+}
+
+func Test_Cmd_MultipleQueryTypes_commaFlag(t *testing.T) {
+	out := runToLogFile(t, "example.com", "-q", "A,CNAME")
+
+	want := "A       example.com.   01m00s   93.184.216.34\n" +
+		"CNAME   example.com.   01m00s   example.org.\n"
+	assert.Equal(t, want, out)
+}
+
+// Test_Cmd_MultipleQueryTypes_repeatedFlag also guards that results follow
+// the requested type order rather than being re-sorted.
+func Test_Cmd_MultipleQueryTypes_repeatedFlag(t *testing.T) {
+	out := runToLogFile(t, "example.com", "-q", "CNAME", "-q", "A")
+
+	want := "CNAME   example.com.   01m00s   example.org.\n" +
+		"A       example.com.   01m00s   93.184.216.34\n"
+	assert.Equal(t, want, out)
+}
+
+func Test_Cmd_MultipleQueryTypes_mixedFlagAndPositional(t *testing.T) {
+	out := runToLogFile(t, "-q", "CNAME", "A", "example.com")
+
+	want := "CNAME   example.com.   01m00s   example.org.\n" +
+		"A       example.com.   01m00s   93.184.216.34\n"
+	assert.Equal(t, want, out)
+}
+
+func Test_Cmd_MultipleQueryTypes_deduplicated(t *testing.T) {
+	out := runToLogFile(t, "example.com", "A", "-q", "A")
+
+	// A single rendered line: the duplicate A query is dropped.
+	want := "A   example.com.   01m00s   93.184.216.34\n"
+	assert.Equal(t, want, out)
+}
+
+func Test_Cmd_MultipleDomains_error(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	rootCmd := NewRootCommand()
+	rootCmd.SetArgs([]string{"example.com", "example.org", "--server", fmt.Sprintf("127.0.0.1:%d", DNSServerPort)})
+
+	err := rootCmd.Execute()
+
+	assert.Error(t, err)
+	assert.Equal(t, "error: multiple domain names provided: example.com, example.org", err.Error())
+}
+
+func Test_Cmd_InvalidQueryType(t *testing.T) {
+	t.Setenv("NO_COLOR", "1") // Disable color codes for easier testing
+
+	rootCmd := NewRootCommand()
+	rootCmd.SetArgs([]string{"example.com", "--server", fmt.Sprintf("127.0.0.1:%d", DNSServerPort), "--query-type", "BOGUS"})
+
+	err := rootCmd.Execute()
+
+	assert.Error(t, err)
+	assert.Equal(t, "error: invalid query type: BOGUS", err.Error())
 }
 
 func Test_Cmd_Debug(t *testing.T) {
@@ -152,8 +261,11 @@ func Test_Cmd_LogFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	assert.Contains(t, string(logFile), "A       example.com.   01m00s   93.184.216.34")
-	assert.Contains(t, string(logFile), "CNAME   example.com.   01m00s   example.org.")
+	// The file content is fully deterministic: only the two answered records
+	// are written, in DefaultQueryTypes order.
+	want := "A       example.com.   01m00s   93.184.216.34\n" +
+		"CNAME   example.com.   01m00s   example.org.\n"
+	assert.Equal(t, want, string(logFile))
 }
 
 func Test_Cmd_LogFile_Debug(t *testing.T) {
@@ -180,10 +292,10 @@ func Test_Cmd_LogFile_Debug(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	assert.Contains(t, string(logFile), "Querying DNS server: @domain=example.com server=127.0.0.1:53535 domain=example.com qtype=A")
-	assert.Contains(t, string(logFile), "Querying DNS server: @domain=example.com server=127.0.0.1:53535 domain=example.com qtype=CNAME")
-	assert.Contains(t, string(logFile), "Received DNS response: @domain=example.com server=127.0.0.1:53535 domain=example.com qtype=A rcode=NOERROR")
-	assert.Contains(t, string(logFile), "Received DNS response: @domain=example.com server=127.0.0.1:53535 domain=example.com qtype=CNAME rcode=NOERROR")
+	assert.Contains(t, string(logFile), "Querying DNS server: server=127.0.0.1:53535 domain=example.com qtype=A")
+	assert.Contains(t, string(logFile), "Querying DNS server: server=127.0.0.1:53535 domain=example.com qtype=CNAME")
+	assert.Contains(t, string(logFile), "Received DNS response: server=127.0.0.1:53535 domain=example.com qtype=A rcode=NOERROR")
+	assert.Contains(t, string(logFile), "Received DNS response: server=127.0.0.1:53535 domain=example.com qtype=CNAME rcode=NOERROR")
 	assert.Contains(t, string(logFile), "A       |example.com.   |01m00s   |93.184.216.34")
 	assert.Contains(t, string(logFile), "CNAME   |example.com.   |01m00s   |example.org.")
 }
@@ -194,9 +306,14 @@ func TestEnsureDNSAddress(t *testing.T) {
 		expected string
 	}{
 		{"127.0.0.1", "127.0.0.1:53"},
+		{"127.0.0.1:5353", "127.0.0.1:5353"},
 		{"2001:558:feed::1", "[2001:558:feed::1]:53"},
 		{"[2001:558:feed::1]:53", "[2001:558:feed::1]:53"},
 		{"example.com", "example.com:53"},
+		{"example.com:5353", "example.com:5353"},
+		{"::ffff:1.1.1.1", "[::ffff:1.1.1.1]:53"},
+		{"[::1]", "[::1]:53"},
+		{"fe80::1%en0", "[fe80::1%en0]:53"},
 	}
 
 	for _, tc := range testCases {

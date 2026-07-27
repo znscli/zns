@@ -1,6 +1,8 @@
 package query
 
 import (
+	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -9,19 +11,71 @@ import (
 	"github.com/miekg/dns"
 )
 
-var (
-	// QueryTypes holds the DNS query types supported by zns for executing DNS queries.
-	QueryTypes = map[string]uint16{
-		"A":     dns.TypeA,
-		"AAAA":  dns.TypeAAAA,
-		"CNAME": dns.TypeCNAME,
-		"MX":    dns.TypeMX,
-		"NS":    dns.TypeNS,
-		"PTR":   dns.TypePTR,
-		"SOA":   dns.TypeSOA,
-		"TXT":   dns.TypeTXT,
+// DefaultQueryTypes are the record types queried when no specific query type
+// is requested, ordered alphabetically so the rendered output is consistent.
+var DefaultQueryTypes = []uint16{
+	dns.TypeA,
+	dns.TypeAAAA,
+	dns.TypeAFSDB,
+	dns.TypeCAA,
+	dns.TypeCDNSKEY,
+	dns.TypeCDS,
+	dns.TypeCERT,
+	dns.TypeCNAME,
+	dns.TypeDHCID,
+	dns.TypeDNAME,
+	dns.TypeDNSKEY,
+	dns.TypeDS,
+	dns.TypeHINFO,
+	dns.TypeHTTPS,
+	dns.TypeKX,
+	dns.TypeLOC,
+	dns.TypeMX,
+	dns.TypeNAPTR,
+	dns.TypeNS,
+	dns.TypeNSEC,
+	dns.TypeNSEC3,
+	dns.TypeNSEC3PARAM,
+	dns.TypeOPENPGPKEY,
+	dns.TypePTR,
+	dns.TypeRP,
+	dns.TypeRRSIG,
+	dns.TypeSMIMEA,
+	dns.TypeSOA,
+	dns.TypeSPF,
+	dns.TypeSRV,
+	dns.TypeSSHFP,
+	dns.TypeSVCB,
+	dns.TypeTLSA,
+	dns.TypeTXT,
+	dns.TypeURI,
+	dns.TypeZONEMD,
+}
+
+// metaQueryTypes are DNS types that do not represent queryable records, such
+// as protocol-internal pseudo types and zone-transfer requests.
+var metaQueryTypes = map[uint16]bool{
+	dns.TypeNone:   true,
+	dns.TypeNXNAME: true,
+	dns.TypeOPT:    true,
+	dns.TypeTKEY:   true,
+	dns.TypeTSIG:   true,
+	dns.TypeIXFR:   true,
+	dns.TypeAXFR:   true,
+	dns.TypeMAILB:  true,
+	dns.TypeMAILA:  true,
+}
+
+// ParseQueryType resolves a case-insensitive record type name (e.g. "A",
+// "https") to its DNS query type. Any record type known to the DNS library
+// can be queried, except meta types such as OPT and AXFR.
+func ParseQueryType(name string) (uint16, error) {
+	qtype, ok := dns.StringToType[strings.ToUpper(name)]
+	if !ok || metaQueryTypes[qtype] {
+		return 0, fmt.Errorf("invalid query type: %s", name)
 	}
-)
+	return qtype, nil
+}
 
 type DNSClient interface {
 	Exchange(*dns.Msg, string) (*dns.Msg, time.Duration, error)
@@ -30,6 +84,9 @@ type DNSClient interface {
 type QueryClient struct {
 	Server string
 	Client DNSClient
+	// Fallback, if set, retries queries whose response came back truncated —
+	// typically a TCP client, where the full answer fits.
+	Fallback DNSClient
 	hclog.Logger
 }
 
@@ -72,12 +129,22 @@ func (q *QueryClient) MultiQuery(domain string, qtypes []uint16) ([]*dns.Msg, er
 func (q *QueryClient) query(domain string, qtype uint16) (*dns.Msg, error) {
 	msg := new(dns.Msg)
 	msg.SetQuestion(dns.Fqdn(domain), qtype)
+	// Advertise a large EDNS0 UDP buffer so records that exceed 512 bytes
+	// (e.g. DNSKEY or large TXT sets) are not truncated.
+	msg.SetEdns0(4096, false)
 
 	q.Debug("Querying DNS server", "server", q.Server, "domain", domain, "qtype", dns.TypeToString[qtype])
 
 	resp, rtt, err := q.Client.Exchange(msg, q.Server)
 	if err != nil {
 		return nil, err
+	}
+
+	if resp.Truncated && q.Fallback != nil {
+		q.Debug("Response truncated; retrying via fallback client", "server", q.Server, "domain", domain, "qtype", dns.TypeToString[qtype])
+		if fresp, frtt, ferr := q.Fallback.Exchange(msg, q.Server); ferr == nil {
+			resp, rtt = fresp, frtt
+		}
 	}
 
 	q.Debug("Received DNS response", "server", q.Server, "domain", domain, "qtype", dns.TypeToString[qtype], "rcode", dns.RcodeToString[resp.Rcode])

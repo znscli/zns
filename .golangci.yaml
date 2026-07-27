@@ -38,6 +38,18 @@ linters:
       - linters:
           - funlen
         source: ^func NewRootCommand
+      # recordFields is a flat table with one case per DNS record type, and
+      # repeats the same handful of JSON field keys by design.
+      - linters:
+          - funlen
+        source: ^func recordFields
+      - linters:
+          - goconst
+        path: internal/view/format\.go
+      - linters:
+          - funlen
+          - goconst
+        path: _test\.go$
     paths:
       - third_party$
       - builtin$
