@@ -1,7 +1,11 @@
 package main
 
-import "github.com/znscli/zns/cmd"
+import (
+	"os"
+
+	"github.com/znscli/zns/cmd"
+)
 
 func main() {
-	cmd.Execute()
+	os.Exit(cmd.Execute())
 }

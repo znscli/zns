@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/miekg/dns"
 	"github.com/stretchr/testify/assert"
 	"github.com/znscli/zns/internal/dnssec"
@@ -87,6 +88,53 @@ func TestHumanRenderer_Render_multipleRecords(t *testing.T) {
 	want := "A\texample.com.\t03m42s\t127.0.0.1\n" +
 		"AAAA\texample.com.\t03m42s\t2001:db8::1\n"
 	assert.Equal(t, want, b.String())
+}
+
+func TestNewRenderer_short(t *testing.T) {
+	r := NewRenderer(ViewShort, &bytes.Buffer{})
+	assert.IsType(t, &ShortRenderer{}, r)
+}
+
+// TestShortRenderer_Render writes only the record value, for piping into
+// other commands.
+func TestShortRenderer_Render(t *testing.T) {
+	b := bytes.Buffer{}
+	NewShortRenderer(&b).Render("example.com", testARecord())
+
+	assert.Equal(t, "127.0.0.1\n", b.String())
+}
+
+// TestShortRenderer_Render_multiField keeps the full RDATA of records whose
+// value spans several fields.
+func TestShortRenderer_Render_multiField(t *testing.T) {
+	b := bytes.Buffer{}
+	NewShortRenderer(&b).Render("example.com", &dns.MX{
+		Hdr:        dns.RR_Header{Name: "example.com.", Rrtype: dns.TypeMX, Class: dns.ClassINET, Ttl: 222},
+		Preference: 10,
+		Mx:         "mail.example.com.",
+	})
+
+	assert.Equal(t, "10 mail.example.com.\n", b.String())
+}
+
+// TestShortRenderer_RenderDNSSEC keeps the output value-only even when
+// validating.
+func TestShortRenderer_RenderDNSSEC(t *testing.T) {
+	b := bytes.Buffer{}
+	NewShortRenderer(&b).RenderDNSSEC("example.com", testARecord(), dnssec.StatusSecure)
+
+	assert.Equal(t, "127.0.0.1\n", b.String())
+}
+
+// TestShortRenderer_Render_noColor keeps colors out of piped output.
+func TestShortRenderer_Render_noColor(t *testing.T) {
+	color.NoColor = false
+	defer func() { color.NoColor = true }()
+
+	b := bytes.Buffer{}
+	NewShortRenderer(&b).Render("example.com", testARecord())
+
+	assert.Equal(t, "127.0.0.1\n", b.String())
 }
 
 func TestJSONRenderer_Render(t *testing.T) {

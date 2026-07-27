@@ -21,6 +21,7 @@ type ViewType int
 const (
 	ViewHuman ViewType = iota
 	ViewJSON
+	ViewShort
 )
 
 // Renderer renders DNS records to an output stream.
@@ -53,6 +54,8 @@ func NewRenderer(vt ViewType, w io.Writer) Renderer {
 		return NewHumanRenderer(w)
 	case ViewJSON:
 		return NewJSONRenderer(w)
+	case ViewShort:
+		return NewShortRenderer(w)
 	default:
 		panic("unknown view type")
 	}
@@ -82,6 +85,31 @@ func (r *HumanRenderer) RenderDNSSEC(domain string, record dns.RR, status dnssec
 	if _, err := io.WriteString(r.w, formatRecord(domain, record, formatDNSSECStatus(status))+"\n"); err != nil {
 		panic(err)
 	}
+}
+
+// ShortRenderer writes only record values, one per line, for piping into
+// other commands.
+type ShortRenderer struct {
+	w io.Writer
+}
+
+var _ Renderer = (*ShortRenderer)(nil)
+
+func NewShortRenderer(w io.Writer) *ShortRenderer {
+	return &ShortRenderer{w: w}
+}
+
+// Render writes the record's value to the output stream.
+func (r *ShortRenderer) Render(_ string, record dns.RR) {
+	if _, err := io.WriteString(r.w, formatValue(record)+"\n"); err != nil {
+		panic(err)
+	}
+}
+
+// RenderDNSSEC writes the record's value; validation status is omitted to
+// keep the output usable as input elsewhere.
+func (r *ShortRenderer) RenderDNSSEC(domain string, record dns.RR, _ dnssec.Status) {
+	r.Render(domain, record)
 }
 
 // JSONRenderer writes DNS records as JSON, one object per line.

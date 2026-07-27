@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,28 +14,31 @@ import (
 
 	"github.com/miekg/dns"
 	"github.com/stretchr/testify/assert"
+	"github.com/znscli/zns/internal/query"
+	"github.com/znscli/zns/internal/view"
 )
 
-const (
-	DNSServerPort = 53535
-)
+// testServerAddr is the address of the test DNS server, bound to an
+// ephemeral port so that concurrent test runs do not collide.
+var testServerAddr string
 
 func TestMain(m *testing.M) {
-	go startDNSServer()
+	conn, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		log.Fatalf("Failed to listen: %v", err)
+	}
+	testServerAddr = conn.LocalAddr().String()
 
-	code := m.Run()
-	os.Exit(code)
-}
-
-func startDNSServer() {
-	dns.HandleFunc(".", dnsHandler)
-
+	server := &dns.Server{PacketConn: conn, Handler: dns.HandlerFunc(dnsHandler)}
 	go func() {
-		err := dns.ListenAndServe(fmt.Sprintf(":%d", DNSServerPort), "udp", nil)
-		if err != nil {
+		if err := server.ActivateAndServe(); err != nil {
 			log.Fatalf("Failed to start DNS server: %v", err)
 		}
 	}()
+
+	code := m.Run()
+	_ = server.Shutdown()
+	os.Exit(code)
 }
 
 func dnsHandler(w dns.ResponseWriter, r *dns.Msg) {
@@ -61,6 +65,26 @@ func dnsHandler(w dns.ResponseWriter, r *dns.Msg) {
 		if q.Name == "servfail.test." {
 			msg.Rcode = dns.RcodeServerFailure
 		}
+		// Some resolvers fail individual types of an otherwise fine name.
+		if q.Name == "example.com." && q.Qtype == dns.TypeNSEC3 {
+			msg.Rcode = dns.RcodeServerFailure
+		}
+		// Simulate a name that does not exist.
+		if q.Name == "nxdomain.test." {
+			msg.Rcode = dns.RcodeNameError
+		}
+		// Simulate a PTR record for the reverse lookup of 192.0.2.1.
+		if q.Name == "1.2.0.192.in-addr.arpa." && q.Qtype == dns.TypePTR {
+			msg.Answer = append(msg.Answer, &dns.PTR{
+				Hdr: dns.RR_Header{
+					Name:   "1.2.0.192.in-addr.arpa.",
+					Rrtype: dns.TypePTR,
+					Class:  dns.ClassINET,
+					Ttl:    60,
+				},
+				Ptr: "ptr.example.com.",
+			})
+		}
 		// Simulate a CNAME record response for "example.com"
 		if q.Name == "example.com." && q.Qtype == dns.TypeCNAME {
 			// Example CNAME record response
@@ -84,7 +108,7 @@ func Test_Cmd(t *testing.T) {
 	t.Setenv("NO_COLOR", "1") // Disable color codes for easier testing
 
 	rootCmd := NewRootCommand()
-	rootCmd.SetArgs([]string{"example.com", "--server", fmt.Sprintf("127.0.0.1:%d", DNSServerPort)})
+	rootCmd.SetArgs([]string{"example.com", "--server", testServerAddr})
 
 	err := rootCmd.Execute()
 
@@ -95,7 +119,7 @@ func Test_Cmd_Error(t *testing.T) {
 	t.Setenv("NO_COLOR", "1") // Disable color codes for easier testing
 
 	rootCmd := NewRootCommand()
-	rootCmd.SetArgs([]string{"--server", fmt.Sprintf("127.0.0.1:%d", DNSServerPort)})
+	rootCmd.SetArgs([]string{"--server", testServerAddr})
 
 	err := rootCmd.Execute()
 
@@ -110,7 +134,7 @@ func Test_Cmd_JSON(t *testing.T) {
 	t.Setenv("ZNS_LOG_FILE", logFile)
 
 	rootCmd := NewRootCommand()
-	rootCmd.SetArgs([]string{"example.com", "--json", "--server", fmt.Sprintf("127.0.0.1:%d", DNSServerPort)})
+	rootCmd.SetArgs([]string{"example.com", "--json", "--server", testServerAddr})
 
 	err := rootCmd.Execute()
 	assert.NoError(t, err)
@@ -140,7 +164,7 @@ func Test_Cmd_QueryType(t *testing.T) {
 	t.Setenv("NO_COLOR", "1") // Disable color codes for easier testing
 
 	rootCmd := NewRootCommand()
-	rootCmd.SetArgs([]string{"example.com", "--server", fmt.Sprintf("127.0.0.1:%d", DNSServerPort), "--query-type", "A"})
+	rootCmd.SetArgs([]string{"example.com", "--server", testServerAddr, "--query-type", "A"})
 
 	err := rootCmd.Execute()
 
@@ -157,7 +181,7 @@ func runToLogFile(t *testing.T, args ...string) string {
 	t.Setenv("ZNS_LOG_FILE", logFile)
 
 	rootCmd := NewRootCommand()
-	rootCmd.SetArgs(append(args, "--server", fmt.Sprintf("127.0.0.1:%d", DNSServerPort)))
+	rootCmd.SetArgs(append(args, "--server", testServerAddr))
 	assert.NoError(t, rootCmd.Execute())
 
 	out, err := os.ReadFile(logFile)
@@ -216,32 +240,228 @@ func Test_Cmd_DNSSECValidate(t *testing.T) {
 	assert.Equal(t, want, out)
 }
 
-// Test_Cmd_ServfailWarning guards that a SERVFAIL response is surfaced on
-// stderr instead of silently rendering nothing.
+// Test_Cmd_Servfail_quietDuringDefaultSweep guards that the default sweep of
+// every record type stays quiet when a resolver fails individual types: those
+// failures are routine and would drown the results in warnings.
+func Test_Cmd_Servfail_quietDuringDefaultSweep(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	var code int
+	out := captureStderr(t, func() {
+		code = run([]string{"example.com", "--server", testServerAddr})
+	})
+
+	assert.Equal(t, 0, code)
+	assert.NotContains(t, out, "SERVFAIL")
+}
+
+// Test_Cmd_Servfail_allQueriesFailed guards that a name whose every query
+// fails is reported as an error, not as an absence of records.
+func Test_Cmd_Servfail_allQueriesFailed(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	var code int
+	out := captureStderr(t, func() {
+		code = run([]string{"servfail.test", "--server", testServerAddr})
+	})
+
+	assert.Equal(t, 1, code)
+	assert.Contains(t, out, "servfail.test: all queries failed")
+}
+
+// Test_Cmd_ServfailWarning guards that a SERVFAIL for an explicitly requested
+// type names the type on stderr, instead of silently rendering nothing.
 func Test_Cmd_ServfailWarning(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 
-	oldStderr := os.Stderr
+	var code int
+	out := captureStderr(t, func() {
+		code = run([]string{"servfail.test", "-q", "A", "--server", testServerAddr})
+	})
+
+	assert.Equal(t, 1, code)
+	assert.Contains(t, out, "warning: A query for servfail.test returned SERVFAIL")
+}
+
+// captureStderr runs fn with os.Stderr redirected and returns what was
+// written to it.
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+
+	old := os.Stderr
 	r, w, err := os.Pipe()
 	assert.NoError(t, err)
 	os.Stderr = w
-	defer func() { os.Stderr = oldStderr }()
+	defer func() { os.Stderr = old }()
 
-	rootCmd := NewRootCommand()
-	rootCmd.SetArgs([]string{"servfail.test", "-q", "A", "--server", fmt.Sprintf("127.0.0.1:%d", DNSServerPort)})
-	assert.NoError(t, rootCmd.Execute())
+	fn()
 
 	assert.NoError(t, w.Close())
 	out, err := io.ReadAll(r)
 	assert.NoError(t, err)
-	assert.Contains(t, string(out), "warning: A query for servfail.test returned SERVFAIL")
+	return string(out)
+}
+
+// Test_Execute_exitCode guards that failures are visible to the shell:
+// zns must not report success when a query could not be made.
+func Test_Execute_exitCode_error(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	var code int
+	out := captureStderr(t, func() {
+		code = run([]string{"example.com", "-q", "BOGUS", "--server", testServerAddr})
+	})
+
+	assert.Equal(t, 1, code)
+	assert.Contains(t, out, "invalid query type: BOGUS")
+}
+
+func Test_Execute_exitCode_success(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	assert.Equal(t, 0, run([]string{"example.com", "-q", "A", "--server", testServerAddr}))
+}
+
+// Test_Execute_exitCode_nxdomain follows host(1): a name that does not exist
+// is a failure for the caller.
+func Test_Execute_exitCode_nxdomain(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	var code int
+	out := captureStderr(t, func() {
+		code = run([]string{"nxdomain.test", "-q", "A", "--server", testServerAddr})
+	})
+
+	assert.Equal(t, 1, code)
+	assert.Contains(t, out, "nxdomain.test: no such domain")
+}
+
+// Test_Cmd_NoRecords tells the user why nothing was printed, rather than
+// leaving them to guess.
+func Test_Cmd_NoRecords(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	var code int
+	out := captureStderr(t, func() {
+		code = run([]string{"example.com", "-q", "MX", "--server", testServerAddr})
+	})
+
+	assert.Equal(t, 0, code) // The name exists; it just has no MX records.
+	assert.Contains(t, out, "no MX records found for example.com")
+}
+
+func Test_Cmd_Short(t *testing.T) {
+	out := runToLogFile(t, "example.com", "-q", "A", "--short")
+
+	assert.Equal(t, "93.184.216.34\n", out)
+}
+
+func Test_Cmd_Short_rejectsJSON(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	rootCmd := NewRootCommand()
+	rootCmd.SetArgs([]string{"example.com", "--short", "--json", "--server", testServerAddr})
+
+	err := rootCmd.Execute()
+
+	assert.Error(t, err)
+	assert.Equal(t, "error: --short and --json cannot be combined", err.Error())
+}
+
+// Test_Cmd_ReverseLookup turns an address argument into a PTR query for the
+// matching .arpa name.
+func Test_Cmd_ReverseLookup(t *testing.T) {
+	out := runToLogFile(t, "192.0.2.1")
+
+	assert.Equal(t, "PTR   1.2.0.192.in-addr.arpa.   01m00s   ptr.example.com.\n", out)
+}
+
+func Test_Cmd_ReverseLookup_short(t *testing.T) {
+	out := runToLogFile(t, "192.0.2.1", "--short")
+
+	assert.Equal(t, "ptr.example.com.\n", out)
+}
+
+// Test_traceQueryTypes guards that a trace without an explicit record type
+// walks the delegation once, rather than repeating it for every default type
+// and hammering the root nameservers.
+func Test_traceQueryTypes_defaultsToSingleWalk(t *testing.T) {
+	assert.Equal(t, []uint16{dns.TypeA}, traceQueryTypes(query.DefaultQueryTypes))
+}
+
+func Test_traceQueryTypes_keepsRequestedTypes(t *testing.T) {
+	requested := []uint16{dns.TypeMX, dns.TypeNS}
+
+	assert.Equal(t, requested, traceQueryTypes(requested))
+}
+
+// A single requested type must be honoured, not replaced by the default.
+func Test_traceQueryTypes_keepsSingleRequestedType(t *testing.T) {
+	assert.Equal(t, []uint16{dns.TypeMX}, traceQueryTypes([]uint16{dns.TypeMX}))
+}
+
+// stubTracer returns canned delegation steps.
+type stubTracer struct{ steps []query.TraceStep }
+
+func (s stubTracer) Trace(string, uint16) ([]query.TraceStep, error) { return s.steps, nil }
+
+func traceStep(zone string, msg *dns.Msg) query.TraceStep {
+	return query.TraceStep{Server: "192.0.2.1:53", Zone: zone, Msg: msg}
+}
+
+// Test_renderTrace_rendersDelegationsThenAnswer renders the nameservers of
+// each zone on the way down, then the records that answer the query.
+func Test_renderTrace_rendersDelegationsThenAnswer(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	referral := new(dns.Msg)
+	referral.Ns = []dns.RR{&dns.NS{
+		Hdr: dns.RR_Header{Name: "example.com.", Rrtype: dns.TypeNS, Class: dns.ClassINET, Ttl: 60},
+		Ns:  "ns1.example.com.",
+	}}
+	answer := new(dns.Msg)
+	answer.Answer = []dns.RR{&dns.A{
+		Hdr: dns.RR_Header{Name: "example.com.", Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60},
+		A:   net.ParseIP("93.184.216.34"),
+	}}
+
+	b := bytes.Buffer{}
+	tracer := stubTracer{steps: []query.TraceStep{
+		traceStep("example.com.", referral),
+		traceStep("", answer),
+	}}
+
+	err := renderTrace(view.NewHumanRenderer(&b), tracer, "example.com", []uint16{dns.TypeA})
+
+	assert.NoError(t, err)
+	want := "NS\texample.com.\t01m00s\tns1.example.com.\n" +
+		"A\texample.com.\t01m00s\t93.184.216.34\n"
+	assert.Equal(t, want, b.String())
+}
+
+// Test_renderTrace_reportsEmptyResult guards that a trace ending without an
+// answer says so, rather than printing nothing.
+func Test_renderTrace_reportsEmptyResult(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	nxdomain := new(dns.Msg)
+	nxdomain.Rcode = dns.RcodeNameError
+
+	b := bytes.Buffer{}
+	tracer := stubTracer{steps: []query.TraceStep{traceStep("", nxdomain)}}
+
+	err := renderTrace(view.NewHumanRenderer(&b), tracer, "nxdomain.test", []uint16{dns.TypeA})
+
+	assert.Error(t, err)
+	assert.Equal(t, "error: nxdomain.test: no such domain", err.Error())
+	assert.Empty(t, b.String())
 }
 
 func Test_Cmd_MultipleDomains_error(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 
 	rootCmd := NewRootCommand()
-	rootCmd.SetArgs([]string{"example.com", "example.org", "--server", fmt.Sprintf("127.0.0.1:%d", DNSServerPort)})
+	rootCmd.SetArgs([]string{"example.com", "example.org", "--server", testServerAddr})
 
 	err := rootCmd.Execute()
 
@@ -253,7 +473,7 @@ func Test_Cmd_InvalidQueryType(t *testing.T) {
 	t.Setenv("NO_COLOR", "1") // Disable color codes for easier testing
 
 	rootCmd := NewRootCommand()
-	rootCmd.SetArgs([]string{"example.com", "--server", fmt.Sprintf("127.0.0.1:%d", DNSServerPort), "--query-type", "BOGUS"})
+	rootCmd.SetArgs([]string{"example.com", "--server", testServerAddr, "--query-type", "BOGUS"})
 
 	err := rootCmd.Execute()
 
@@ -265,7 +485,7 @@ func Test_Cmd_Debug(t *testing.T) {
 	t.Setenv("NO_COLOR", "1") // Disable color codes for easier testing
 
 	rootCmd := NewRootCommand()
-	rootCmd.SetArgs([]string{"example.com", "--debug", "--server", fmt.Sprintf("127.0.0.1:%d", DNSServerPort), "--query-type", "A"})
+	rootCmd.SetArgs([]string{"example.com", "--debug", "--server", testServerAddr, "--query-type", "A"})
 
 	err := rootCmd.Execute()
 
@@ -284,7 +504,7 @@ func Test_Cmd_LogFile(t *testing.T) {
 	t.Setenv("ZNS_LOG_FILE", file.Name())
 
 	rootCmd := NewRootCommand()
-	rootCmd.SetArgs([]string{"example.com", "--server", fmt.Sprintf("127.0.0.1:%d", DNSServerPort)})
+	rootCmd.SetArgs([]string{"example.com", "--server", testServerAddr})
 
 	err = rootCmd.Execute()
 	assert.NoError(t, err)
@@ -315,7 +535,7 @@ func Test_Cmd_LogFile_Debug(t *testing.T) {
 	t.Setenv("ZNS_LOG_FILE", file.Name())
 
 	rootCmd := NewRootCommand()
-	rootCmd.SetArgs([]string{"example.com", "--debug", "--server", fmt.Sprintf("127.0.0.1:%d", DNSServerPort)})
+	rootCmd.SetArgs([]string{"example.com", "--debug", "--server", testServerAddr})
 
 	err = rootCmd.Execute()
 	assert.NoError(t, err)
@@ -327,10 +547,10 @@ func Test_Cmd_LogFile_Debug(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	assert.Contains(t, string(logFile), "Querying DNS server: server=127.0.0.1:53535 domain=example.com qtype=A")
-	assert.Contains(t, string(logFile), "Querying DNS server: server=127.0.0.1:53535 domain=example.com qtype=CNAME")
-	assert.Contains(t, string(logFile), "Received DNS response: server=127.0.0.1:53535 domain=example.com qtype=A rcode=NOERROR")
-	assert.Contains(t, string(logFile), "Received DNS response: server=127.0.0.1:53535 domain=example.com qtype=CNAME rcode=NOERROR")
+	assert.Contains(t, string(logFile), fmt.Sprintf("Querying DNS server: server=%s domain=example.com qtype=A", testServerAddr))
+	assert.Contains(t, string(logFile), fmt.Sprintf("Querying DNS server: server=%s domain=example.com qtype=CNAME", testServerAddr))
+	assert.Contains(t, string(logFile), fmt.Sprintf("Received DNS response: server=%s domain=example.com qtype=A rcode=NOERROR", testServerAddr))
+	assert.Contains(t, string(logFile), fmt.Sprintf("Received DNS response: server=%s domain=example.com qtype=CNAME rcode=NOERROR", testServerAddr))
 	assert.Contains(t, string(logFile), "A       |example.com.   |01m00s   |93.184.216.34")
 	assert.Contains(t, string(logFile), "CNAME   |example.com.   |01m00s   |example.org.")
 }

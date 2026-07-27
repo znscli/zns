@@ -235,6 +235,17 @@ func formatRecordAsJSON(domain string, answer dns.RR) map[string]any {
 	return m
 }
 
+// formatValue returns a record's value in zone-file presentation, without
+// colors: the RDATA fields joined by spaces.
+func formatValue(answer dns.RR) string {
+	fields := recordFields(answer)
+	values := make([]string, len(fields))
+	for i, f := range fields {
+		values[i] = fmt.Sprint(f.value)
+	}
+	return strings.Join(values, " ")
+}
+
 // formatRecord generates a human-readable string representing a DNS record
 // with colors: all fields but the last in red, the last in white. Optional
 // extra columns are inserted before the value column: the value cell carries

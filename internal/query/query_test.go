@@ -96,6 +96,36 @@ func TestDefaultQueryTypes_sortedByName(t *testing.T) {
 	assert.True(t, sort.StringsAreSorted(names), "DefaultQueryTypes must be sorted by type name, got: %v", names)
 }
 
+// TestReverseName converts an IP address into the name that holds its PTR
+// record, so that "zns 1.1.1.1" performs a reverse lookup.
+func TestReverseName_ipv4(t *testing.T) {
+	name, ok := ReverseName("1.1.1.1")
+
+	assert.True(t, ok)
+	assert.Equal(t, "1.1.1.1.in-addr.arpa.", name)
+}
+
+func TestReverseName_ipv6(t *testing.T) {
+	name, ok := ReverseName("2001:db8::1")
+
+	assert.True(t, ok)
+	assert.Equal(t, "1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa.", name)
+}
+
+func TestReverseName_domain(t *testing.T) {
+	_, ok := ReverseName("example.com")
+
+	assert.False(t, ok)
+}
+
+// TestReverseName_numericHostname guards that a name made only of digits and
+// dots but which is not an address is left alone.
+func TestReverseName_numericHostname(t *testing.T) {
+	_, ok := ReverseName("1.2.3")
+
+	assert.False(t, ok)
+}
+
 func TestParseQueryType(t *testing.T) {
 	qtype, err := ParseQueryType("A")
 	assert.NoError(t, err)

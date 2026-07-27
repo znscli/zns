@@ -2,6 +2,7 @@ package query
 
 import (
 	"fmt"
+	"net"
 	"strings"
 	"sync"
 	"time"
@@ -94,6 +95,8 @@ type QueryClient struct {
 	// Checking Disabled (CD) bit: a validating resolver would otherwise
 	// withhold bogus data as SERVFAIL, leaving nothing to inspect.
 	Validate bool
+	// RootServers are the nameservers a delegation walk starts from.
+	RootServers []string
 	hclog.Logger
 }
 
@@ -101,10 +104,25 @@ type QueryClient struct {
 // The provided client must implement the Exchange method for DNS queries.
 func NewQueryClient(server string, client DNSClient, logger hclog.Logger) *QueryClient {
 	return &QueryClient{
-		Server: server,
-		Client: client,
-		Logger: logger,
+		Server:      server,
+		Client:      client,
+		Logger:      logger,
+		RootServers: rootServers,
 	}
+}
+
+// ReverseName converts an IP address into the name holding its PTR record,
+// so that looking up an address performs a reverse lookup. It reports false
+// for anything that is not an address.
+func ReverseName(address string) (string, bool) {
+	if net.ParseIP(address) == nil {
+		return "", false
+	}
+	name, err := dns.ReverseAddr(address)
+	if err != nil {
+		return "", false
+	}
+	return name, true
 }
 
 // MultiQuery performs DNS queries for multiple types concurrently.
