@@ -2,6 +2,8 @@ package dnssec
 
 import (
 	"crypto"
+	"encoding/base64"
+	"errors"
 	"net"
 	"testing"
 	"time"
@@ -209,6 +211,156 @@ func TestValidate_emptyRRset(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Equal(t, StatusInsecure, status)
+}
+
+// TestValidate_bogusForeignDS guards against accepting a DS RRset owned by a
+// different zone: an attacker can publish, in a zone they control, a DS whose
+// digest covers a key they minted for the victim zone, and have their parent
+// sign it for real.
+func TestValidate_bogusForeignDS(t *testing.T) {
+	z := newTestZone(t)
+
+	// Attacker mints a key owned by "test." but publishes its DS under
+	// "evil.test.", legitimately signed by the root.
+	attackerKey, attackerPriv := zoneKey(t, "test.")
+	foreignDS := attackerKey.ToDS(dns.SHA256)
+	foreignDS.Hdr.Name = "evil.test."
+	foreignDS.Hdr.Ttl = testTTL
+
+	forged := []dns.RR{&dns.A{
+		Hdr: dns.RR_Header{Name: "www.test.", Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: testTTL},
+		A:   net.IPv4(198, 51, 100, 66),
+	}}
+	z.resolver["test./DS"] = msgWith(foreignDS, sign(t, z.rootKey, z.rootPriv, []dns.RR{foreignDS}))
+	z.resolver["test./DNSKEY"] = msgWith(attackerKey, sign(t, attackerKey, attackerPriv, []dns.RR{attackerKey}))
+
+	v := NewValidator(z.resolver, z.anchors)
+	status, err := v.Validate(forged, []*dns.RRSIG{sign(t, attackerKey, attackerPriv, forged)})
+
+	assert.Error(t, err)
+	assert.NotEqual(t, StatusSecure, status)
+}
+
+// TestValidate_bogusSignerNotAncestor guards against a signer name that is
+// only a string suffix of the owner name: "test." must not be able to sign
+// records owned by "nottest.".
+func TestValidate_bogusSignerNotAncestor(t *testing.T) {
+	z := newTestZone(t)
+	v := NewValidator(z.resolver, z.anchors)
+
+	forged := []dns.RR{&dns.A{
+		Hdr: dns.RR_Header{Name: "nottest.", Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: testTTL},
+		A:   net.IPv4(198, 51, 100, 66),
+	}}
+	sig := sign(t, z.testKey, z.testPriv, forged)
+
+	status, err := v.Validate(forged, []*dns.RRSIG{sig})
+
+	assert.Error(t, err)
+	assert.NotEqual(t, StatusSecure, status)
+}
+
+// TestValidate_bogusRevokedKey guards RFC 5011: a revoked key must not
+// validate anything.
+func TestValidate_bogusRevokedKey(t *testing.T) {
+	z := newTestZone(t)
+
+	revoked := *z.testKey
+	revoked.Flags |= 128 // REVOKE
+
+	rrset := []dns.RR{&dns.A{
+		Hdr: dns.RR_Header{Name: "www.test.", Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: testTTL},
+		A:   net.IPv4(192, 0, 2, 9),
+	}}
+	sig := sign(t, &revoked, z.testPriv, rrset)
+
+	// The zone publishes only the revoked key, anchored by a matching DS.
+	revokedDS := revoked.ToDS(dns.SHA256)
+	revokedDS.Hdr.Ttl = testTTL
+	z.resolver["test./DNSKEY"] = msgWith(&revoked, sign(t, &revoked, z.testPriv, []dns.RR{&revoked}))
+	z.resolver["test./DS"] = msgWith(revokedDS, sign(t, z.rootKey, z.rootPriv, []dns.RR{revokedDS}))
+
+	v := NewValidator(z.resolver, z.anchors)
+	status, err := v.Validate(rrset, []*dns.RRSIG{sig})
+
+	assert.Error(t, err)
+	assert.NotEqual(t, StatusSecure, status)
+}
+
+// failOnceResolver fails the very first query, then behaves normally,
+// simulating a single dropped UDP packet.
+type failOnceResolver struct {
+	inner  mapResolver
+	failed bool
+}
+
+func (r *failOnceResolver) Query(domain string, qtype uint16) (*dns.Msg, error) {
+	if !r.failed {
+		r.failed = true
+		return nil, errors.New("i/o timeout")
+	}
+	return r.inner.Query(domain, qtype)
+}
+
+// TestValidate_transientFailureNotCached guards that a dropped packet is
+// reported as unknown rather than bogus, and is not cached: a retry of the
+// same validation must succeed.
+func TestValidate_transientFailureNotCached(t *testing.T) {
+	z := newTestZone(t)
+	resolver := &failOnceResolver{inner: z.resolver}
+	v := NewValidator(resolver, z.anchors)
+
+	status, err := v.Validate(z.aRRset, []*dns.RRSIG{z.aSig})
+	assert.Error(t, err)
+	assert.Equal(t, StatusUnknown, status)
+
+	status, err = v.Validate(z.aRRset, []*dns.RRSIG{z.aSig})
+	assert.NoError(t, err)
+	assert.Equal(t, StatusSecure, status)
+}
+
+// TestValidate_secureWithDecoyKey guards that every DNSKEY matching the
+// signature's key tag is tried, not just the first: key tags are a hint and
+// may collide.
+func TestValidate_secureWithDecoyKey(t *testing.T) {
+	z := newTestZone(t)
+
+	// A decoy key with the same key tag as the real one, listed first. The
+	// key tag is an RFC 4034 checksum over the RDATA, so adjusting two
+	// even-indexed public key bytes by +1/-1 preserves it.
+	decoy := *z.testKey
+	raw, err := base64.StdEncoding.DecodeString(z.testKey.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw[0]++
+	raw[2]--
+	decoy.PublicKey = base64.StdEncoding.EncodeToString(raw)
+	assert.Equal(t, z.testKey.KeyTag(), decoy.KeyTag(), "decoy key must collide on key tag")
+
+	keys := msgWith(&decoy, z.testKey, sign(t, z.testKey, z.testPriv, []dns.RR{&decoy, z.testKey}))
+	z.resolver["test./DNSKEY"] = keys
+
+	v := NewValidator(z.resolver, z.anchors)
+	status, err := v.Validate(z.aRRset, []*dns.RRSIG{z.aSig})
+
+	assert.NoError(t, err)
+	assert.Equal(t, StatusSecure, status)
+}
+
+// TestValidate_secureWithExpiredSiblingSignature guards that a stale
+// signature published alongside a fresh one does not shadow it.
+func TestValidate_secureWithExpiredSiblingSignature(t *testing.T) {
+	z := newTestZone(t)
+	v := NewValidator(z.resolver, z.anchors)
+
+	stale := signWithTimes(t, z.testKey, z.testPriv, z.aRRset,
+		time.Now().Add(-48*time.Hour), time.Now().Add(-24*time.Hour))
+
+	status, err := v.Validate(z.aRRset, []*dns.RRSIG{stale, z.aSig})
+
+	assert.NoError(t, err)
+	assert.Equal(t, StatusSecure, status)
 }
 
 // TestRootAnchors guards the built-in IANA trust anchors: root key tags

@@ -4,7 +4,10 @@
 // records of its parent, up to the root zone trust anchors.
 //
 // The validator covers positive answers only; authenticated denial of
-// existence (NSEC/NSEC3 proofs) is not implemented.
+// existence (NSEC/NSEC3 proofs) is not implemented. Consequently a status of
+// "insecure" means no signatures were seen, which is not cryptographic proof
+// that the zone is unsigned: an attacker able to strip records could suppress
+// signatures. Only "secure" is a positive, verified result.
 package dnssec
 
 import (
@@ -26,9 +29,17 @@ const (
 	// StatusInsecure means the RRset is not covered by DNSSEC: it carries no
 	// signatures, or its zone is an unsigned delegation.
 	StatusInsecure Status = "insecure"
-	// StatusBogus means validation was attempted but failed.
+	// StatusBogus means validation was attempted and failed: signatures or
+	// the chain of trust did not check out.
 	StatusBogus Status = "bogus"
+	// StatusUnknown means validation could not be completed, e.g. because a
+	// DNSKEY or DS lookup failed. It says nothing about authenticity.
+	StatusUnknown Status = "unknown"
 )
+
+// revokeFlag is the RFC 5011 REVOKE bit in the DNSKEY flags field. A revoked
+// key must not be used to validate anything.
+const revokeFlag = 1 << 7
 
 // Resolver performs the DNS queries the validator needs. Responses must
 // include DNSSEC records, i.e. queries must set the DNSSEC OK (DO) bit.
@@ -39,6 +50,14 @@ type Resolver interface {
 // errInsecureDelegation marks a break in the chain of trust that means a zone
 // is unsigned rather than tampered with.
 var errInsecureDelegation = errors.New("unsigned delegation")
+
+// resolverError wraps a failure to fetch chain-of-trust records. Such
+// failures are transport problems, not evidence of tampering, so they are
+// neither cached nor reported as bogus.
+type resolverError struct{ err error }
+
+func (e resolverError) Error() string { return e.err.Error() }
+func (e resolverError) Unwrap() error { return e.err }
 
 // Validator validates RRsets against the DNSSEC chain of trust, caching
 // per-zone results across validations.
@@ -112,15 +131,31 @@ func (v *Validator) Validate(rrset []dns.RR, sigs []*dns.RRSIG) (Status, error) 
 		}
 		return StatusSecure, nil
 	}
-	if errors.Is(lastErr, errInsecureDelegation) {
-		return StatusInsecure, lastErr
+	return statusOf(lastErr), lastErr
+}
+
+// statusOf maps a validation failure to the status it represents.
+func statusOf(err error) Status {
+	switch {
+	case errors.Is(err, errInsecureDelegation):
+		return StatusInsecure
+	case errors.As(err, &resolverError{}):
+		return StatusUnknown
+	default:
+		return StatusBogus
 	}
-	return StatusBogus, lastErr
 }
 
 // verify checks a single signature over the RRset and the signer zone's chain
 // of trust.
 func (v *Validator) verify(rrset []dns.RR, sig *dns.RRSIG) error {
+	owner := rrset[0].Header().Name
+	// The signer must be the owner's zone or one of its ancestors. The DNS
+	// library only compares name suffixes, which would let "example.com."
+	// sign records owned by "notexample.com.".
+	if !dns.IsSubDomain(sig.SignerName, owner) {
+		return fmt.Errorf("signer %s is not a zone of %s", sig.SignerName, owner)
+	}
 	if !sig.ValidityPeriod(time.Now()) {
 		return fmt.Errorf("signature for %s is outside its validity period", sig.Hdr.Name)
 	}
@@ -129,40 +164,63 @@ func (v *Validator) verify(rrset []dns.RR, sig *dns.RRSIG) error {
 	if err != nil {
 		return err
 	}
-	key := keys.key(sig.KeyTag, sig.Algorithm)
-	if key == nil {
-		return fmt.Errorf("zone %s has no DNSKEY with key tag %d", sig.SignerName, sig.KeyTag)
-	}
-	if err := sig.Verify(key, rrset); err != nil {
-		return fmt.Errorf("signature verification for %s failed: %v", sig.Hdr.Name, err)
+	if err := verifyRRset(rrset, sig, keys.matching(sig.KeyTag, sig.Algorithm)); err != nil {
+		return err
 	}
 	return v.secureZone(sig.SignerName)
 }
 
-func (r *keyResponse) key(keyTag uint16, algorithm uint8) *dns.DNSKEY {
+// verifyRRset checks the signature against every candidate key: the key tag
+// is a hint, and multiple keys may share one.
+func verifyRRset(rrset []dns.RR, sig *dns.RRSIG, candidates []*dns.DNSKEY) error {
+	if len(candidates) == 0 {
+		return fmt.Errorf("zone %s has no usable DNSKEY with key tag %d", sig.SignerName, sig.KeyTag)
+	}
+	var lastErr error
+	for _, key := range candidates {
+		if err := sig.Verify(key, rrset); err != nil {
+			lastErr = fmt.Errorf("signature verification for %s failed: %v", sig.Hdr.Name, err)
+			continue
+		}
+		return nil
+	}
+	return lastErr
+}
+
+// matching returns every non-revoked key with the given key tag and
+// algorithm.
+func (r *keyResponse) matching(keyTag uint16, algorithm uint8) []*dns.DNSKEY {
+	var candidates []*dns.DNSKEY
 	for _, key := range r.keys {
 		if key.KeyTag() == keyTag && key.Algorithm == algorithm {
-			return key
+			candidates = append(candidates, key)
 		}
 	}
-	return nil
+	return candidates
 }
 
 // zoneKeys fetches (and caches) a zone's DNSKEY RRset with its signatures.
 func (v *Validator) zoneKeys(zone string) (*keyResponse, error) {
-	zone = strings.ToLower(dns.Fqdn(zone))
+	zone = canonical(zone)
 	if keys, ok := v.keys[zone]; ok {
 		return keys, nil
 	}
 
 	msg, err := v.resolver.Query(zone, dns.TypeDNSKEY)
 	if err != nil {
-		return nil, err
+		return nil, resolverError{fmt.Errorf("DNSKEY lookup for %s failed: %v", zone, err)}
 	}
 	keys := &keyResponse{}
 	for _, rr := range msg.Answer {
+		// Records owned by another name do not belong to this zone's key set.
+		if canonical(rr.Header().Name) != zone {
+			continue
+		}
 		switch rec := rr.(type) {
 		case *dns.DNSKEY:
+			if rec.Flags&revokeFlag != 0 {
+				continue // Revoked keys must not validate anything (RFC 5011).
+			}
 			keys.keys = append(keys.keys, rec)
 		case *dns.RRSIG:
 			if rec.TypeCovered == dns.TypeDNSKEY {
@@ -175,8 +233,10 @@ func (v *Validator) zoneKeys(zone string) (*keyResponse, error) {
 }
 
 // secureZone verifies (and caches) a zone's position in the chain of trust.
+// Only deterministic outcomes are cached: a lookup failure may succeed on a
+// later attempt.
 func (v *Validator) secureZone(zone string) error {
-	zone = strings.ToLower(dns.Fqdn(zone))
+	zone = canonical(zone)
 	if err, ok := v.zones[zone]; ok {
 		return err
 	}
@@ -184,6 +244,11 @@ func (v *Validator) secureZone(zone string) error {
 	v.zones[zone] = fmt.Errorf("chain of trust loop at zone %s", zone)
 
 	err := v.checkZone(zone)
+	if errors.As(err, &resolverError{}) {
+		delete(v.zones, zone)
+		delete(v.keys, zone)
+		return err
+	}
 	v.zones[zone] = err
 	return err
 }
@@ -197,7 +262,7 @@ func (v *Validator) checkZone(zone string) error {
 		return err
 	}
 	if len(keys.keys) == 0 {
-		return fmt.Errorf("no DNSKEY records for zone %s", zone)
+		return fmt.Errorf("no usable DNSKEY records for zone %s", zone)
 	}
 
 	dsset, err := v.dsRecords(zone)
@@ -215,10 +280,7 @@ func (v *Validator) checkZone(zone string) error {
 
 	lastErr := fmt.Errorf("no DNSKEY of zone %s matches its DS records", zone)
 	for _, ds := range dsset {
-		for _, key := range keys.keys {
-			if key.KeyTag() != ds.KeyTag || key.Algorithm != ds.Algorithm {
-				continue
-			}
+		for _, key := range keys.matching(ds.KeyTag, ds.Algorithm) {
 			computed := key.ToDS(ds.DigestType)
 			if computed == nil || !strings.EqualFold(computed.Digest, ds.Digest) {
 				lastErr = fmt.Errorf("DNSKEY %d of zone %s does not match its DS digest", ds.KeyTag, zone)
@@ -235,22 +297,25 @@ func (v *Validator) checkZone(zone string) error {
 	return lastErr
 }
 
-// verifyRRsetWithKey verifies an RRset against the signature made by the
+// verifyRRsetWithKey verifies an RRset against any signature made by the
 // given key.
 func verifyRRsetWithKey(rrset []dns.RR, sigs []*dns.RRSIG, key *dns.DNSKEY) error {
+	lastErr := fmt.Errorf("RRset of %s is not signed by key %d", key.Hdr.Name, key.KeyTag())
 	for _, sig := range sigs {
 		if sig.KeyTag != key.KeyTag() {
 			continue
 		}
 		if !sig.ValidityPeriod(time.Now()) {
-			return fmt.Errorf("signature for %s is outside its validity period", sig.Hdr.Name)
+			lastErr = fmt.Errorf("signature for %s is outside its validity period", sig.Hdr.Name)
+			continue
 		}
 		if err := sig.Verify(key, rrset); err != nil {
-			return fmt.Errorf("signature verification for %s failed: %v", sig.Hdr.Name, err)
+			lastErr = fmt.Errorf("signature verification for %s failed: %v", sig.Hdr.Name, err)
+			continue
 		}
 		return nil
 	}
-	return fmt.Errorf("RRset of %s is not signed by key %d", key.Hdr.Name, key.KeyTag())
+	return lastErr
 }
 
 // dsRecords returns the validated DS RRset for a zone: the trust anchors at
@@ -263,12 +328,16 @@ func (v *Validator) dsRecords(zone string) ([]*dns.DS, error) {
 
 	msg, err := v.resolver.Query(zone, dns.TypeDS)
 	if err != nil {
-		return nil, err
+		return nil, resolverError{fmt.Errorf("DS lookup for %s failed: %v", zone, err)}
 	}
 	var dsset []*dns.DS
 	var sigs []*dns.RRSIG
 	var rrset []dns.RR
 	for _, rr := range msg.Answer {
+		// A DS record delegating another zone says nothing about this one.
+		if canonical(rr.Header().Name) != zone {
+			continue
+		}
 		switch rec := rr.(type) {
 		case *dns.DS:
 			dsset = append(dsset, rec)
@@ -284,16 +353,23 @@ func (v *Validator) dsRecords(zone string) ([]*dns.DS, error) {
 	}
 
 	// The DS RRset lives in the parent zone and must itself validate.
-	var lastErr error
+	lastErr := fmt.Errorf("DS RRset for zone %s is unsigned", zone)
 	for _, sig := range sigs {
+		// A zone cannot vouch for its own delegation.
+		if canonical(sig.SignerName) == zone {
+			continue
+		}
 		if err := v.verify(rrset, sig); err != nil {
 			lastErr = err
 			continue
 		}
 		return dsset, nil
 	}
-	if lastErr == nil {
-		lastErr = fmt.Errorf("DS RRset for zone %s is unsigned", zone)
-	}
 	return nil, lastErr
+}
+
+// canonical returns a name in the form used as a map key: lowercase and
+// fully qualified.
+func canonical(name string) string {
+	return strings.ToLower(dns.Fqdn(name))
 }

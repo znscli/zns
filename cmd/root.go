@@ -106,11 +106,15 @@ func renderValidated(renderer view.Renderer, validator *dnssec.Validator, domain
 	}
 
 	for _, rr := range answers {
-		if status, ok := statuses[key(rr)]; ok {
-			renderer.RenderDNSSEC(domain, rr, status)
-		} else {
-			renderer.Render(domain, rr)
+		k := key(rr)
+		status, ok := statuses[k]
+		if !ok {
+			// An RRSIG whose covered RRset is absent, e.g. from an explicit
+			// RRSIG query: there is nothing to validate it against, but every
+			// row still carries a status while validating.
+			status = dnssec.StatusUnknown
 		}
+		renderer.RenderDNSSEC(domain, rr, status)
 	}
 }
 
@@ -218,6 +222,7 @@ included and validated against the chain of trust.`,
 			// Retry truncated UDP responses over TCP, where the full answer fits.
 			querier.Fallback = &dns.Client{Net: "tcp"}
 			querier.DNSSEC = dnssecRecords || dnssecValidate
+			querier.Validate = dnssecValidate
 			messages, err := querier.MultiQuery(domain, qtypes)
 			if err != nil {
 				return err
@@ -233,6 +238,12 @@ included and validated against the chain of trust.`,
 				if m.Rcode != dns.RcodeSuccess && m.Rcode != dns.RcodeNameError {
 					fmt.Fprintf(os.Stderr, "warning: %s query for %s returned %s\n",
 						dns.Type(m.Question[0].Qtype).String(), domain, dns.RcodeToString[m.Rcode])
+				}
+				// A truncated answer may hold a partial RRset, whose signature
+				// then fails to verify for reasons that are not tampering.
+				if m.Truncated {
+					fmt.Fprintf(os.Stderr, "warning: %s answer for %s is truncated and may be incomplete\n",
+						dns.Type(m.Question[0].Qtype).String(), domain)
 				}
 				if validator != nil {
 					renderValidated(renderer, validator, domain, m.Answer)

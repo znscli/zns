@@ -4,7 +4,8 @@ package cmd
 
 import (
 	"fmt"
-	"net"
+	"net/netip"
+	"strconv"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -26,8 +27,9 @@ func systemNameserver() (string, error) {
 }
 
 // adapterNameservers collects the DNS server addresses of all network
-// adapters that are up, in adapter order.
-func adapterNameservers() ([]net.IP, error) {
+// adapters that are up, in adapter order. Link-local IPv6 addresses carry
+// the adapter's zone, without which they cannot be dialed.
+func adapterNameservers() ([]netip.Addr, error) {
 	// 15 KB is the size recommended by the GetAdaptersAddresses
 	// documentation; grow and retry if it turns out to be insufficient.
 	size := uint32(15 * 1024)
@@ -48,15 +50,22 @@ func adapterNameservers() ([]net.IP, error) {
 			return nil, err
 		}
 
-		var nameservers []net.IP
+		var nameservers []netip.Addr
 		for adapter := adapters; adapter != nil; adapter = adapter.Next {
 			if adapter.OperStatus != windows.IfOperStatusUp || adapter.IfType == windows.IF_TYPE_SOFTWARE_LOOPBACK {
 				continue
 			}
 			for dnsServer := adapter.FirstDnsServerAddress; dnsServer != nil; dnsServer = dnsServer.Next {
-				if ip := dnsServer.Address.IP(); ip != nil {
-					nameservers = append(nameservers, ip)
+				ip := dnsServer.Address.IP()
+				addr, ok := netip.AddrFromSlice(ip)
+				if !ok {
+					continue
 				}
+				addr = addr.Unmap()
+				if addr.IsLinkLocalUnicast() {
+					addr = addr.WithZone(strconv.FormatUint(uint64(adapter.Ipv6IfIndex), 10))
+				}
+				nameservers = append(nameservers, addr)
 			}
 		}
 		return nameservers, nil

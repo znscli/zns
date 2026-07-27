@@ -39,6 +39,8 @@ func formatDNSSECStatus(status dnssec.Status) string {
 		return color.HiGreenString(string(status))
 	case dnssec.StatusBogus:
 		return color.HiRedString(string(status))
+	case dnssec.StatusUnknown:
+		return color.HiBlackString(string(status))
 	default:
 		return color.HiYellowString(string(status))
 	}

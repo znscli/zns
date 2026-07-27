@@ -32,6 +32,9 @@ type MockDNSClient struct {
 
 	// ReceivedDO stores whether the request set the DNSSEC OK (DO) bit.
 	ReceivedDO bool
+
+	// ReceivedCheckingDisabled stores whether the request set the CD bit.
+	ReceivedCheckingDisabled bool
 }
 
 func (m *MockDNSClient) Exchange(req *dns.Msg, addr string) (*dns.Msg, time.Duration, error) {
@@ -40,6 +43,7 @@ func (m *MockDNSClient) Exchange(req *dns.Msg, addr string) (*dns.Msg, time.Dura
 		m.mu.Lock()
 		m.ReceivedDomain = req.Question[0].Name
 		m.QueryType = req.Question[0].Qtype
+		m.ReceivedCheckingDisabled = req.CheckingDisabled
 		if opt := req.IsEdns0(); opt != nil {
 			m.ReceivedUDPSize = opt.UDPSize()
 			m.ReceivedDO = opt.Do()
@@ -189,6 +193,32 @@ func TestQueryClient_Query_DNSSEC_setsDOBit(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.True(t, mockDNSClient.ReceivedDO)
+}
+
+// TestQueryClient_Query_validateSetsCheckingDisabled guards that local
+// validation asks the resolver not to validate on our behalf: without the CD
+// bit, a validating resolver returns SERVFAIL for bogus data and zns can
+// never observe it.
+func TestQueryClient_Query_validateSetsCheckingDisabled(t *testing.T) {
+	mockDNSClient := &MockDNSClient{}
+	client := NewQueryClient("8.8.8.8", mockDNSClient, hclog.NewNullLogger())
+	client.DNSSEC = true
+	client.Validate = true
+
+	_, err := client.query("example.com", dns.TypeA)
+
+	assert.NoError(t, err)
+	assert.True(t, mockDNSClient.ReceivedCheckingDisabled)
+}
+
+func TestQueryClient_Query_noCheckingDisabledByDefault(t *testing.T) {
+	mockDNSClient := &MockDNSClient{}
+	client := NewQueryClient("8.8.8.8", mockDNSClient, hclog.NewNullLogger())
+
+	_, err := client.query("example.com", dns.TypeA)
+
+	assert.NoError(t, err)
+	assert.False(t, mockDNSClient.ReceivedCheckingDisabled)
 }
 
 // TestQueryClient_Query_exported guards the exported single-type query used

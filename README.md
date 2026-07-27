@@ -70,7 +70,7 @@ HTTPS   google.com.   50m02s   1 . alpn="h2,h3"
 
 ### DNSSEC
 
-`--dnssec` requests DNSSEC records (sets the DO bit), returning RRSIGs alongside the answers. `--dnssec-validate` additionally validates every record against the DNSSEC chain of trust — RRSIG, DNSKEY, and DS records up to the IANA root trust anchors — and reports a per-record status: `secure`, `insecure`, or `bogus`.
+`--dnssec` requests DNSSEC records (sets the DO bit), returning RRSIGs alongside the answers. `--dnssec-validate` additionally validates every record against the DNSSEC chain of trust — RRSIG, DNSKEY, and DS records up to the IANA root trust anchors — and reports a per-record status: `secure`, `insecure`, `bogus`, or `unknown` when the chain could not be retrieved.
 
 ```sh
 $ zns cloudflare.com -q SOA --dnssec

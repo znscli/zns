@@ -90,6 +90,10 @@ type QueryClient struct {
 	// DNSSEC requests DNSSEC records (RRSIGs) by setting the DNSSEC OK (DO)
 	// bit on queries.
 	DNSSEC bool
+	// Validate indicates that signatures are checked locally, which sets the
+	// Checking Disabled (CD) bit: a validating resolver would otherwise
+	// withhold bogus data as SERVFAIL, leaving nothing to inspect.
+	Validate bool
 	hclog.Logger
 }
 
@@ -140,6 +144,7 @@ func (q *QueryClient) query(domain string, qtype uint16) (*dns.Msg, error) {
 	// Advertise a large EDNS0 UDP buffer so records that exceed 512 bytes
 	// (e.g. DNSKEY or large TXT sets) are not truncated.
 	msg.SetEdns0(4096, q.DNSSEC)
+	msg.CheckingDisabled = q.Validate
 
 	q.Debug("Querying DNS server", "server", q.Server, "domain", domain, "qtype", dns.TypeToString[qtype])
 
@@ -152,6 +157,8 @@ func (q *QueryClient) query(domain string, qtype uint16) (*dns.Msg, error) {
 		q.Debug("Response truncated; retrying via fallback client", "server", q.Server, "domain", domain, "qtype", dns.TypeToString[qtype])
 		if fresp, frtt, ferr := q.Fallback.Exchange(msg, q.Server); ferr == nil {
 			resp, rtt = fresp, frtt
+		} else {
+			q.Debug("Fallback query failed; keeping the truncated response", "server", q.Server, "domain", domain, "err", ferr)
 		}
 	}
 
