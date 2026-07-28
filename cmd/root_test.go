@@ -495,23 +495,21 @@ func Test_Cmd_Debug(t *testing.T) {
 func Test_Cmd_LogFile(t *testing.T) {
 	t.Setenv("NO_COLOR", "1") // Disable color codes for easier testing
 
-	file, err := os.CreateTemp(t.TempDir(), "zns")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(file.Name())
-
-	t.Setenv("ZNS_LOG_FILE", file.Name())
+	// A path only: the command creates the file itself. Holding an open
+	// handle here would prevent the TempDir cleanup from deleting it on
+	// Windows, where open files cannot be removed.
+	logPath := filepath.Join(t.TempDir(), "zns.log")
+	t.Setenv("ZNS_LOG_FILE", logPath)
 
 	rootCmd := NewRootCommand()
 	rootCmd.SetArgs([]string{"example.com", "--server", testServerAddr})
 
-	err = rootCmd.Execute()
+	err := rootCmd.Execute()
 	assert.NoError(t, err)
 
-	assert.FileExists(t, file.Name())
+	assert.FileExists(t, logPath)
 
-	logFile, err := os.ReadFile(file.Name())
+	logFile, err := os.ReadFile(logPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -526,23 +524,21 @@ func Test_Cmd_LogFile(t *testing.T) {
 func Test_Cmd_LogFile_Debug(t *testing.T) {
 	t.Setenv("NO_COLOR", "1") // Disable color codes for easier testing
 
-	file, err := os.CreateTemp(t.TempDir(), "zns")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(file.Name())
-
-	t.Setenv("ZNS_LOG_FILE", file.Name())
+	// A path only: the command creates the file itself. Holding an open
+	// handle here would prevent the TempDir cleanup from deleting it on
+	// Windows, where open files cannot be removed.
+	logPath := filepath.Join(t.TempDir(), "zns.log")
+	t.Setenv("ZNS_LOG_FILE", logPath)
 
 	rootCmd := NewRootCommand()
 	rootCmd.SetArgs([]string{"example.com", "--debug", "--server", testServerAddr})
 
-	err = rootCmd.Execute()
+	err := rootCmd.Execute()
 	assert.NoError(t, err)
 
-	assert.FileExists(t, file.Name())
+	assert.FileExists(t, logPath)
 
-	logFile, err := os.ReadFile(file.Name())
+	logFile, err := os.ReadFile(logPath)
 	if err != nil {
 		t.Fatal(err)
 	}
