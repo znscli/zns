@@ -33,6 +33,11 @@ port install zns
 pkg install zns
 ```
 
+### Arch Linux
+```sh
+yay -S zns-bin
+```
+
 ## Usage
 
 ```sh
